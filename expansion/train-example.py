@@ -18,7 +18,7 @@ class TrainingConfig:
     hub_private_repo = False
     overwrite_output_dir = True  # overwrite the old model when re-running the notebook
     seed = 0
-    dataset_name = "huggan/pokemon"
+    dataset_name = "huggan/wikiart"
 
 
 config = TrainingConfig()
