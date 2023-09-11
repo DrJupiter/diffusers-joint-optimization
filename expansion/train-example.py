@@ -51,7 +51,7 @@ preprocess = transforms.Compose(
 )
 
 def transform(examples):
-    images = [preprocess(image.convert("RGB")) for image in examples["img"]]
+    images = [preprocess(image.convert("RGB")) for image in examples["image"]]
     return {"images": images}
 
 
