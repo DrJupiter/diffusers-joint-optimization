@@ -94,7 +94,7 @@ from PIL import Image
 from diffusers import DDPMScheduler
 from diffusers import ScoreSdeVeScheduler
 
-noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
+noise_scheduler = ScoreSdeVeScheduler(num_train_timesteps=1000)
 
 #plt.imshow(Image.fromarray(((noisy_image.permute(0, 2, 3, 1) + 1.0) * 127.5).type(torch.uint8).numpy()[0]))
 #plt.show()
@@ -218,7 +218,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         # After each epoch you optionally sample some demo images with evaluate() and save the model
         if accelerator.is_main_process:
-            pipeline = DDPMPipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
+            pipeline = ScoreSdeVePipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
 
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.num_epochs - 1:
                 images = evaluate(config, epoch, pipeline)
