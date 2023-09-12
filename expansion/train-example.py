@@ -94,7 +94,7 @@ from PIL import Image
 from diffusers import DDPMScheduler
 from diffusers import ScoreSdeVeScheduler
 
-noise_scheduler = ScoreSdeVeScheduler(num_train_timesteps=1000)
+noise_scheduler = ScoreSdeVeScheduler()
 
 #plt.imshow(Image.fromarray(((noisy_image.permute(0, 2, 3, 1) + 1.0) * 127.5).type(torch.uint8).numpy()[0]))
 #plt.show()

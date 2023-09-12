@@ -97,7 +97,7 @@ class ScoreSdeVePipeline(DiffusionPipeline):
 
             sample, sample_mean = output.prev_sample, output.prev_sample_mean
 
-        sample = sample_mean.clamp(0, 1)
+        sample = (sample_mean /2 + 0.5).clamp(0, 1)
         sample = sample.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
             sample = self.numpy_to_pil(sample)
