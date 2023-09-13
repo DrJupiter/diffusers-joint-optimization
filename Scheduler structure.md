@@ -40,7 +40,7 @@ In the case of Jax another function `create_state` is also needed.
 ## Math
 The main math in `step_pred` is:
 $$diffusion = \sqrt{sigma_t^2 - sigma_{t-1}^2}$$
-$$$drift = -diffusion^2 \cdot \text{model\_output}$$
+$$drift = -diffusion^2 \cdot \text{model\_output}$$
 $$\mu_{\text{prev sample}} = sample - drift$$
 $$\text{prev\_sample} = \mu_{\text{prev sample}} + diffusion \cdot noise$$
 
