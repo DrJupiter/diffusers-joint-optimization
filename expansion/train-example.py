@@ -1,5 +1,5 @@
+# Define config
 from dataclasses import dataclass
-
 @dataclass
 class TrainingConfig:
     image_size = 32  # the generated image resolution
@@ -13,22 +13,19 @@ class TrainingConfig:
     save_model_epochs = 5
     mixed_precision = "fp16"  # `no` for float32, `fp16` for automatic mixed precision
     output_dir = "cifar10-vp"  # the model name locally and on the HF Hub
-
     push_to_hub = True  # whether to upload the saved model to the HF Hub
     hub_private_repo = False
     overwrite_output_dir = True  # overwrite the old model when re-running the notebook
     seed = 0
     dataset_name = "huggan/pokemon"
-
-
 config = TrainingConfig()
 
+# load dataset
 from datasets import load_dataset
-
 dataset = load_dataset(config.dataset_name, split="train")
 
+# plot some sample images
 import matplotlib.pyplot as plt
-
 """
 fig, axs = plt.subplots(1, 4, figsize=(16, 4))
 for i, image in enumerate(dataset[:4]["img"]):
@@ -41,6 +38,7 @@ plt.show()
 
 from torchvision import transforms
 
+# define the preprocess that is performed on the images
 preprocess = transforms.Compose(
     [
         transforms.Resize((config.image_size, config.image_size)),
@@ -49,20 +47,19 @@ preprocess = transforms.Compose(
         transforms.Normalize([0.5], [0.5]),
     ]
 )
-
 def transform(examples):
     images = [preprocess(image.convert("RGB")) for image in examples["image"]]
     return {"images": images}
-
-
+# Transform the images according to the preprocess
 dataset.set_transform(transform)
 
-import torch
 
+import torch
+# Define the dataloader
 train_dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.train_batch_size, shuffle=True)
 
+# Define the model
 from diffusers import UNet2DModel
-
 model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
@@ -89,11 +86,14 @@ model = UNet2DModel(
 model.cuda()
 
 
-import torch
+# import torch # Already imported earlier
 from PIL import Image
+
+# Load schedulers
 from diffusers import DDPMScheduler
 from diffusers import ScoreSdeVeScheduler
 
+# define noise scheduler withe the max amount of variance
 noise_scheduler = ScoreSdeVeScheduler(sigma_max=20)
 
 #plt.imshow(Image.fromarray(((noisy_image.permute(0, 2, 3, 1) + 1.0) * 127.5).type(torch.uint8).numpy()[0]))
@@ -101,22 +101,24 @@ noise_scheduler = ScoreSdeVeScheduler(sigma_max=20)
 
 import torch.nn.functional as F
 
+# Define optimizer
 from diffusers.optimization import get_cosine_schedule_with_warmup
-
 optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
+# Learning ratae scheduler
 lr_scheduler = get_cosine_schedule_with_warmup(
     optimizer=optimizer,
     num_warmup_steps=config.lr_warmup_steps,
     num_training_steps=(len(train_dataloader) * config.num_epochs),
 )
 
+# Load pipeline
 from diffusers import ScoreSdeVePipeline
 from diffusers import DDPMPipeline
 from diffusers.utils import make_image_grid
 import math
 import os
 
-
+# Define evaluation function
 def evaluate(config, epoch, pipeline):
     # Sample some images from random noise (this is the backward diffusion process).
     # The default pipeline output type is `List[PIL.Image]`
@@ -143,7 +145,7 @@ from pathlib import Path
 import os
 import wandb
 
-
+# func to find full name of repo
 def get_full_repo_name(model_id: str, organization: str = None, token: str = None):
     if token is None:
         token = HfFolder.get_token()
@@ -153,7 +155,7 @@ def get_full_repo_name(model_id: str, organization: str = None, token: str = Non
     else:
         return f"{organization}/{model_id}"
 
-
+# func defining the training loop
 def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
@@ -162,6 +164,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         log_with="wandb",
         project_dir=os.path.join(config.output_dir, "logs"),
     )
+    # logging and tracking
     if accelerator.is_main_process:
         if config.push_to_hub:
             repo_name = get_full_repo_name(Path(config.output_dir).name)
@@ -177,18 +180,21 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         model, optimizer, train_dataloader, lr_scheduler
     )
 
+    # step counter
     global_step = 0
 
     # Now you train the model
     for epoch in range(config.num_epochs):
+        # cool training counter in console
         progress_bar = tqdm(total=len(train_dataloader), disable=not accelerator.is_local_main_process)
         progress_bar.set_description(f"Epoch {epoch}")
 
+        # Loop over data
         for step, batch in enumerate(train_dataloader):
             clean_images = batch["images"].cuda()
             # Sample noise to add to the images
-            noise = torch.randn(clean_images.shape).to(clean_images.device)
-            bs = clean_images.shape[0]
+            noise = torch.randn(clean_images.shape).to(clean_images.device) # Follows N(0,1) for each pixel 
+            bs = clean_images.shape[0] # bs = batch size
 
             # Sample a random timestep for each image
             timesteps = torch.randint(
@@ -205,11 +211,12 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
                 loss = F.mse_loss(noise_pred, noise)
                 accelerator.backward(loss)
 
-                accelerator.clip_grad_norm_(model.parameters(), 1.0)
+                accelerator.clip_grad_norm_(model.parameters(), 1.0) # uses clip to stunt growth
                 optimizer.step()
                 lr_scheduler.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad() # reset grad to 0
 
+            # logging and tracking
             progress_bar.update(1)
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step}
             progress_bar.set_postfix(**logs)
