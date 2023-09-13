@@ -67,8 +67,8 @@ model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
     out_channels=3,  # the number of output channels
-    layers_per_block=2,  # how many ResNet layers to use per UNet block
-    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+    layers_per_block=3,  # how many ResNet layers to use per UNet block
+    block_out_channels=(128, 256, 512, 512, 1024, 1024),  # the number of output channels for each UNet block
     down_block_types=(
         "DownBlock2D",  # a regular ResNet downsampling block
         "DownBlock2D",
@@ -94,7 +94,7 @@ from PIL import Image
 from diffusers import DDPMScheduler
 from diffusers import ScoreSdeVeScheduler
 
-noise_scheduler = ScoreSdeVeScheduler()
+noise_scheduler = ScoreSdeVeScheduler(sigma_max=20)
 
 #plt.imshow(Image.fromarray(((noisy_image.permute(0, 2, 3, 1) + 1.0) * 127.5).type(torch.uint8).numpy()[0]))
 #plt.show()
@@ -185,7 +185,6 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
-            break
             clean_images = batch["images"].cuda()
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device)
@@ -203,7 +202,6 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
             with accelerator.accumulate(model):
                 # Predict the noise residual
                 noise_pred = model(noisy_images, timesteps, return_dict=False)[0]
-                print(noise_pred)
                 loss = F.mse_loss(noise_pred, noise)
                 accelerator.backward(loss)
 

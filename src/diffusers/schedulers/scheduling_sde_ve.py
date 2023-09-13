@@ -275,6 +275,7 @@ class ScoreSdeVeScheduler(SchedulerMixin, ConfigMixin):
         prev_sample_mean = sample + step_size * model_output
         prev_sample = prev_sample_mean + ((step_size * 2) ** 0.5) * noise
 
+
         if not return_dict:
             return (prev_sample,)
 
