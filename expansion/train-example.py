@@ -67,8 +67,8 @@ model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
     out_channels=3,  # the number of output channels
-    layers_per_block=3,  # how many ResNet layers to use per UNet block
-    block_out_channels=(128, 256, 256, 512, 1024, 1024),  # the number of output channels for each UNet block
+    layers_per_block=2,  # how many ResNet layers to use per UNet block
+    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     down_block_types=(
         "DownBlock2D",  # a regular ResNet downsampling block
         "DownBlock2D",
@@ -124,7 +124,7 @@ def evaluate(config, epoch, pipeline):
         batch_size=config.eval_batch_size,
         generator=torch.manual_seed(config.seed),
     ).images
-
+    
     # Make a grid out of the images
     image_grid = make_image_grid(images, rows=4, cols=4)
 
@@ -185,6 +185,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
+            break
             clean_images = batch["images"].cuda()
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device)
@@ -192,7 +193,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
             # Sample a random timestep for each image
             timesteps = torch.randint(
-                0, noise_scheduler.config.num_train_timesteps, (bs,), device=clean_images.device
+                1, noise_scheduler.config.num_train_timesteps, (bs,), device=clean_images.device
             ).long()
 
             # Add noise to the clean images according to the noise magnitude at each timestep
@@ -202,6 +203,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
             with accelerator.accumulate(model):
                 # Predict the noise residual
                 noise_pred = model(noisy_images, timesteps, return_dict=False)[0]
+                print(noise_pred)
                 loss = F.mse_loss(noise_pred, noise)
                 accelerator.backward(loss)
 
