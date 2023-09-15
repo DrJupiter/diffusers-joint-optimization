@@ -21,7 +21,7 @@ The two main functions are:
 
 These two functions share input and output.
 
-`step_pred` predicts the t-1 using the reverse SDE.
+`step_pred` predicts the next time step `scheduler.timesteps[t-1]` using the reverse SDE.
 - `get_adjacent_sigma`, to get Sigma for (t-1)
 
 `step_correct` corrects the prediction through multiple steps (can be seen below the code example).

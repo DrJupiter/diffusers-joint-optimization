@@ -65,7 +65,7 @@ model = UNet2DModel(
     in_channels=3,  # the number of input channels, 3 for RGB images
     out_channels=3,  # the number of output channels
     layers_per_block=3,  # how many ResNet layers to use per UNet block
-    block_out_channels=(128, 256, 512, 512, 1024, 1024),  # the number of output channels for each UNet block
+    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     down_block_types=(
         "DownBlock2D",  # a regular ResNet downsampling block
         "DownBlock2D",
@@ -93,8 +93,7 @@ from PIL import Image
 from diffusers import DDPMScheduler
 from diffusers import ScoreSdeVeScheduler
 
-# define noise scheduler withe the max amount of variance
-noise_scheduler = ScoreSdeVeScheduler(sigma_max=20)
+noise_scheduler = DDPMScheduler()
 
 #plt.imshow(Image.fromarray(((noisy_image.permute(0, 2, 3, 1) + 1.0) * 127.5).type(torch.uint8).numpy()[0]))
 #plt.show()
@@ -129,7 +128,6 @@ def evaluate(config, epoch, pipeline):
     
     # Make a grid out of the images
     image_grid = make_image_grid(images, rows=4, cols=4)
-
     # Save the images
     test_dir = os.path.join(config.output_dir, "samples")
     os.makedirs(test_dir, exist_ok=True)
@@ -191,6 +189,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         # Loop over data
         for step, batch in enumerate(train_dataloader):
+            break
             clean_images = batch["images"].cuda()
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device) # Follows N(0,1) for each pixel 
@@ -198,7 +197,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
             # Sample a random timestep for each image
             timesteps = torch.randint(
-                1, noise_scheduler.config.num_train_timesteps, (bs,), device=clean_images.device
+                0, noise_scheduler.config.num_train_timesteps, (bs,), device=clean_images.device
             ).long()
 
             # Add noise to the clean images according to the noise magnitude at each timestep
@@ -225,7 +224,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         # After each epoch you optionally sample some demo images with evaluate() and save the model
         if accelerator.is_main_process:
-            pipeline = ScoreSdeVePipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
+            pipeline = DDPMPipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
 
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.num_epochs - 1:
                 images = evaluate(config, epoch, pipeline)
