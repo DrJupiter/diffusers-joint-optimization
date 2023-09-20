@@ -189,7 +189,6 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         # Loop over data
         for step, batch in enumerate(train_dataloader):
-            break
             clean_images = batch["images"].cuda()
             # Sample noise to add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device) # Follows N(0,1) for each pixel 
