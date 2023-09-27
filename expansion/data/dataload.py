@@ -11,8 +11,9 @@ from torchvision import transforms
 
 import torch
 
-
 from transformers import CLIPTokenizer
+
+import jax
 
 dataset_name_mapping = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
@@ -65,6 +66,7 @@ def get_dataset(config):
             )
 
 # LOAD TOKENIZER
+# TODO (KLAUS): FIGURE OUT WHAT THE PRETRAIN PATH SHOULD BE
     tokenizer = CLIPTokenizer.from_pretrained(
         config.pretrained_model_name_or_path, revision=config.revision, subfolder="tokenizer"
     )
@@ -130,3 +132,9 @@ def get_dataset(config):
 
         return batch
 
+    total_train_batch_size = config.train_batch_size * jax.local_device_count()
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=total_train_batch_size, drop_last=True
+    )
+
+    return train_dataloader
