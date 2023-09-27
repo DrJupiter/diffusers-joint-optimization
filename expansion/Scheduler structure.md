@@ -1,7 +1,7 @@
+# Structure of Yang Song SDE VE Scheduler
+## How it flows together
 
-# How it flows together
-
-## Classes:
+### Classes:
 
 The main class `FlaxScoreSdeVeScheduler` inherits from `FlaxSchedulerMixin`. 
 	`FlaxSchedulerMixin` inherits from `PushToHubMixin`
@@ -14,7 +14,7 @@ Two other classes are needed:
 - `FlaxSdeVeOutput` The class the defines the output dict in place of a tuple. As such it is not important.
 
 
-## Functions:
+### Functions:
 
 The two main functions are:
 	`step_pred` and `step_correct`
@@ -37,7 +37,7 @@ In the case of Jax another function `create_state` is also needed.
 - the function `set_timesteps` which alters the timestep in the *state*.
 - `set_sigmas` uses this to update Sigma in the `state`
 
-## Math
+### Math
 The main math in `step_pred` is:
 $$diffusion = \sqrt{sigma_t^2 - sigma_{t-1}^2}$$
 $$drift = -diffusion^2 \cdot \text{model\_output}$$
@@ -49,7 +49,7 @@ Where
 - *noise* is just normal
 - *model_out* is the output of the model, aka the score ((?))
 
-### `step_correct` and `step_pred` use
+#### `step_correct` and `step_pred` use
 Code taken from `src\diffusers\pipelines\score_sde_ve\pipeline_score_sde_ve.py`
 ```Python
 class ScoreSdeVePipeline(DiffusionPipeline)
@@ -69,11 +69,11 @@ It shows that multiple `step_correct` are run for each `step_pred` as expected
 
 
 
-# Main Class
-## `ScoreSdeVeScheduler` or `FlaxScoreSdeVeScheduler`
+## Main Class
+### `ScoreSdeVeScheduler` or `FlaxScoreSdeVeScheduler`
 
 
-### Class functions:
+#### Class functions:
 - `__init__`
 	- Description: "Initialises variables"
 		- `num_train_timesteps`: int = 2000,
@@ -140,7 +140,7 @@ It shows that multiple `step_correct` are run for each `step_pred` as expected
 	- Input: 
 	- Returns: 
 
-#### Jax only:
+##### Jax only:
 - `has_state`
 	- Returns True
 - `create_state`
@@ -148,19 +148,19 @@ It shows that multiple `step_correct` are run for each `step_pred` as expected
 	- Input: None
 	- Returns: `ScoreSdeVeSchedulerState`
 
-#### Torch only
+##### Torch only
 - `scale_model_input`
 - `add_noise`
 
 
-# Supporting classes
-## `ScoreSdeVeSchedulerState` (state)
+## Supporting classes
+### `ScoreSdeVeSchedulerState` (state)
 Class that stores 3 variables:
 1. `timesteps`: `Optional[jnp.ndarray]` = None
 2. `discrete_sigmas`: `Optional[jnp.ndarray] `= None
 3. `sigmas`: `Optional[jnp.ndarray]` = None
 
-## `FlaxSdeVeOutput`
+### `FlaxSdeVeOutput`
 Class that stores 3 variables:
 1. `state`: `ScoreSdeVeSchedulerState`
 2. `prev_sample`: `jnp.ndarray`
@@ -168,9 +168,9 @@ Class that stores 3 variables:
 
 
 
-# Inheritance classes
+## Inheritance classes
 
-## `PushToHubMixin`
+### `PushToHubMixin`
 
 This is the very deepest inheritance class.
 It has the functions:
@@ -184,7 +184,7 @@ The class can be found at: `src\diffusers\utils\hub_utils.py` (identical for Fla
 Neither of these need be changed. Therefore we quickly skip over it.
 
 The important class that inherits from this class is:
-## `SchedulerMixin` or `FlaxSchedulerMixin`
+### `SchedulerMixin` or `FlaxSchedulerMixin`
 
 Mixin containing common functions for the schedulers
 
@@ -213,3 +213,192 @@ Class functions:
 
 
 
+
+
+
+
+
+# The different SDE/ODE schedulers
+
+Here we will present all schedulers based on SDE's or ODE's for ease of comparison.
+This will make it easier to write our own scheduler.
+
+## SDE VE flax
+
+### How it flows together
+
+#### Classes:
+
+The main class `FlaxScoreSdeVeScheduler` inherits from `FlaxSchedulerMixin`. 
+	`FlaxSchedulerMixin` inherits from `PushToHubMixin`
+
+The inheritance results in the scheduler being able to upload to Huggingface (`PushToHubMixin`),
+and to save and load scheduler settings (`FlaxSchedulerMixin`)
+
+Two other classes are needed:
+- `ScoreSdeVeSchedulerState` the class that defines the state
+- `FlaxSdeVeOutput` The class the defines the output dict in place of a tuple. As such it is not important.
+
+
+#### Functions:
+
+The two main functions are:
+	`step_pred` and `step_correct`
+
+These two functions share input and output.
+
+`step_pred` predicts the next time step `scheduler.timesteps[t-1]` using the reverse SDE.
+- `get_adjacent_sigma`, to get Sigma for (t-1)
+
+`step_correct` corrects the prediction through multiple steps (can be seen below the code example).
+- doesn't call any other functions in the class.
+
+In the case of Jax another function `create_state` is also needed.
+
+`create_state` calls
+- the Class `ScoreSdeVeSchedulerState` with the function `.create()` to create the *state*.
+- It then uses `set_sigmas` to alter Sigma in the *state*.
+
+`set_sigmas` calls
+- the function `set_timesteps` which alters the timestep in the *state*.
+- `set_sigmas` uses this to update Sigma in the `state`
+
+
+## DPM multistep flax
+
+### Idea behind model
+
+In this work, we propose an exact formulation of the solution of diffusion ODEs.
+The formulation analytically computes the linear part of the solution, rather than leaving all terms to black-box ODE solvers as adopted in previous works
+By applying change-of-variable, the solution can be equivalently simplified to an exponentially weighted integral of the neural network.
+DPM-Solver can generate high-quality samples in only 10 to 20 function evaluations on various datasets
+20-steps yield FID 2.87
+
+So the sampling method used here is very different from what others do.
+
+### Achievements
+
+- FID 2.87 for 20 NN evals
+- Only 20 NN evals from noise to img
+- Uses other computations in addition to NN to sample
+### How it flows together
+
+#### Classes:
+
+The main class `FlaxDPMSolverMultistepScheduler` inherits from `FlaxSchedulerMixin` and `ConfigMixin`. 
+	`FlaxSchedulerMixin` inherits from `PushToHubMixin`
+
+The inheritance results in the scheduler being able to upload to Huggingface (`PushToHubMixin`).
+The ability to save and load scheduler settings (`FlaxSchedulerMixin`).
+Configuration storage, save and load configs (`ConfigMixin`).
+
+Two other classes are needed:
+- `DPMSolverMultistepSchedulerState` the class that defines the state
+- `FlaxDPMSolverMultistepSchedulerOutput` The class the defines the output dict in place of a tuple by holding the state. As such it is not important.
+	- Inherits from `FlaxSchedulerOutput`. This class just holds a jnp.array
+#### Functions:
+
+The main function is `step()`:
+	It predict the sample at the previous timestep by DPM-Solver based on learned model outputs.
+
+`step()` calls
+- `dpm_solver_first_order_update()`
+- `multistep_dpm_solver_second_order_update()`
+- `multistep_dpm_solver_third_order_update()`
+
+Another important function is
+`convert_model_output()` 
+- Converts the given model output to corresponding type that the algorithm (DPM-Solver / DPM-Solver++) needs
+This is a very specific function to this scheduler
+
+`add_noise()`
+- Adds noise according to `add_common_noise()`
+
+`create_state()`
+- Creates the state class
+
+`set_timesteps()`
+- Sets the discrete timesteps used for the diffusion chain. Supporting function to be run before inference.
+
+`scale_model_input()`
+- Ensures interchangeability with schedulers that need to scale the denoising model input depending on the current timestep
+
+### Use in practise 
+
+## Karras VE flax
+
+`KarrasVeScheduler` is a stochastic sampler tailored o variance-expanding (VE) models. It is based on the [Elucidating the Design Space of Diffusion-Based Generative Models](https://huggingface.co/papers/2206.00364) and [Score-based generative modeling through stochastic differential equations](https://huggingface.co/papers/2011.13456) papers.
+
+### Achievements
+
+- Simpler design (they argue)
+- FID 1.79 conditioned and 1.97 unconditioned.
+- 35 evals from noise to img
+
+### How it flows together
+
+#### Classes:
+
+The main class `FlaxKarrasVeScheduler` inherits from `FlaxSchedulerMixin` and `ConfigMixin`. 
+	`FlaxSchedulerMixin` inherits from `PushToHubMixin`
+
+The inheritance results in the scheduler being able to upload to Huggingface (`PushToHubMixin`).
+The ability to save and load scheduler settings (`FlaxSchedulerMixin`).
+Configuration storage, save and load configs (`ConfigMixin`).
+
+Two other classes are needed:
+- `KarrasVeSchedulerState` the class that defines the state
+- `FlaxKarrasVeOutput` The class the defines the output dict in place of a tuple by holding the state. As such it is not important.
+	- Inherits from `BaseOutput`. Holds something akin to an array but defined by selves
+#### Functions:
+
+The two main functions are: `step()` and `step_correct()`
+- These two functions share input and output.
+
+`step()` predicts the next time step `t-1` using the reverse SDE.
+- This happens through 3 computations that does not require any other functions.
+
+`step_correct()` corrects the prediction through multiple steps (can be seen below the code example).
+- Basically the same just slightly altered 1 equation
+
+`create_state()`
+- Creates state using the class `KarrasVeSchedulerState`
+
+`add_noise_to_input()`
+- Explicit Langevin-like "churn" step of adding noise to the sample according to a factor $\gamma_i ≥ 0$ to reach a higher noise level $\sigma_{hat} = \sigma_i + \gamma_i*\sigma_i$.
+
+`set_timesteps()`
+- Sets the continuous timesteps used for the diffusion chain. Supporting function to be run before inference.
+
+
+## Commonalities 
+
+### Classes
+
+They basically follow  the same class structure, so that is nice
+
+### Functions
+
+They all share the following functions:
+- `step()`
+	- It seems like many of the computations are given as input Karras VE compared to SDE VE.
+- `create_state()`
+	- Very similar in style. They all create the state using the state class using the create function. 
+	- SDE VE and SPM-solver do some specific stuff as well.
+- `set_timesteps()`
+	- Updates the timesteps in state using the place function in state. The state is returned.
+
+Karras VE and SDE VE share:
+- `step_correct()`
+	- Does mainly the same thing as `step()`
+This most likely occurs in one of the multistep functions in DPM-solver
+
+
+
+#### Noise adding
+
+Karras VE adds noise through a function called `add_noise_to_input()`
+
+SDE VE sets Sigma's that control Drift and Diffusion terms. But I'm not certain get where the noise gets added to samples during training as it doesn't have a dedicated function for this
+
+DPM-solver uses `add_noise()` to add noise to the sample
