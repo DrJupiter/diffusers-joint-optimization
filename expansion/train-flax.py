@@ -2,9 +2,18 @@
 from config.config import Config
 from config.utils import get_wandb_input, save_local_cloud
 
-from transformers import set_seed
+from transformers import set_seed, FlaxCLIPTextModel
 
 import wandb
+
+
+from diffusers import (
+    FlaxAutoencoderKL,
+    FlaxDDPMScheduler,
+    FlaxPNDMScheduler,
+    FlaxStableDiffusionPipeline,
+    FlaxUNet2DConditionModel,
+)
 
 def main():
 
@@ -21,13 +30,13 @@ def main():
 # TODO (KLAUS): CREATE MODELS
     text_encoder, vae, unet,  = get_models(config)
     text_encoder = FlaxCLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path, revision=args.revision, subfolder="text_encoder", dtype=weight_dtype
+        config.training.pretrained_model_or_path, revision=config.revision, subfolder="text_encoder", dtype=config.training.weight_dtype
     )
     vae, vae_params = FlaxAutoencoderKL.from_pretrained(
-        args.pretrained_model_name_or_path, revision=args.revision, subfolder="vae", dtype=weight_dtype
+        config.training.pretrained_model_or_path, revision=config.revision, subfolder="vae", dtype=config.training.weight_dtype
     )
     unet, unet_params = FlaxUNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, revision=args.revision, subfolder="unet", dtype=weight_dtype
+        config.training.pretrained_model_or_path, revision=config.revision, subfolder="unet", dtype=config.training.weight_dtype
     )    
 
 # SAVE PARAMETERS
