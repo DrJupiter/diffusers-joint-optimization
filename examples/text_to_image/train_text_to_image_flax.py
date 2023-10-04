@@ -549,7 +549,7 @@ def main():
             safety_checker=safety_checker,
             feature_extractor=CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32"),
         )
-
+        
         pipeline.save_pretrained(
             args.output_dir,
             params={

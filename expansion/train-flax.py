@@ -11,7 +11,7 @@ from config.config import Config
 from config.utils import get_wandb_input, save_local_cloud, get_params_to_save
 from data.dataload import get_dataset
 
-from transformers import set_seed, FlaxCLIPTextModel
+from transformers import set_seed, FlaxCLIPTextModel, CLIPImageProcessor, CLIPTokenizer
 
 from diffusers.pipelines.stable_diffusion import FlaxStableDiffusionSafetyChecker
 
@@ -49,8 +49,13 @@ def main():
     if config.training.seed is not None:
         set_seed(config.training.seed)
 
-# DATASET
-    train_dataset, train_dataloader = get_dataset(config)  
+
+# DATASET & TOKENIZER
+    tokenizer = CLIPTokenizer.from_pretrained(
+        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="tokenizer"
+    )
+
+    train_dataset, train_dataloader = get_dataset(config, tokenizer)  
 
 # MODELS
 # TODO (KLAUS): INITIALIZE SDE AND ITS PARAMETERS
@@ -217,15 +222,31 @@ def main():
 
 # SAVE PARAMETERS
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
-    params = {
-                "text_encoder": get_params_to_save(text_encoder_params),
-                "vae": get_params_to_save(vae_params),
-                "unet": get_params_to_save(state.params),
-                "safety_checker": FlaxStableDiffusionSafetyChecker.from_pretrained(
-            "CompVis/stable-diffusion-safety-checker", from_pt=True
-        ).params,
-            }
-    save_local_cloud(config, params)
+
+    if jax.process_index() == 0:
+        scheduler = FlaxPNDMScheduler(
+                beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
+            )
+
+        safety_checker = FlaxStableDiffusionSafetyChecker.from_pretrained(
+                "CompVis/stable-diffusion-safety-checker", from_pt=True
+            )
+        pipeline = FlaxStableDiffusionPipeline(
+                text_encoder=text_encoder,
+                vae=vae,
+                unet=unet,
+                tokenizer=tokenizer,
+                scheduler=scheduler,
+                safety_checker=safety_checker,
+                feature_extractor=CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32"),
+            )
+        params = {
+                    "text_encoder": get_params_to_save(text_encoder_params),
+                    "vae": get_params_to_save(vae_params),
+                    "unet": get_params_to_save(state.params),
+                    "safety_checker": safety_checker.params,
+                }
+        save_local_cloud(config, params, pipeline)
 
 
 if __name__ == "__main__":

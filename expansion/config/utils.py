@@ -35,7 +35,7 @@ def get_full_repo_name(model_id: str, organization: str = None, token: str = Non
     else:
         return f"{organization}/{model_id}"
 
-def save_local_cloud(config: Config, params):
+def save_local_cloud(config: Config, params, pipeline):
     # Handle the repository creation
     if jax.process_index() == 0:
         
@@ -46,8 +46,8 @@ def save_local_cloud(config: Config, params):
                 repo_id=get_full_repo_name(config.training.save_dir), exist_ok=True, token=HfFolder.get_token()
             ).repo_id
 
-        # TODO (KLAUS): CHANGE THIS TO OUR PIPELINE 
-        pipeline = FlaxDiffusionPipeline()
+         
+        #pipeline = TODO (KLAUS): CHANGE THIS TO OUR PIPELINE 
 
         pipeline.save_pretrained(
             config.training.save_dir,

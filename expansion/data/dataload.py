@@ -11,7 +11,7 @@ from torchvision import transforms
 
 import torch
 
-from transformers import CLIPTokenizer
+
 
 import jax
 
@@ -23,7 +23,7 @@ from config.utils import Config
 
 # TODO (KLAUS): FILL OUT CONFIG ATTRIBUTES
 
-def get_dataset(config: Config):
+def get_dataset(config: Config, tokenizer):
 
 # LOAD DATASET
     if config.training.dataset_name is not None:
@@ -68,10 +68,6 @@ def get_dataset(config: Config):
                 f"--caption_column' value '{config.training.caption_column}' needs to be one of: {', '.join(column_names)}"
             )
 
-# LOAD TOKENIZER
-    tokenizer = CLIPTokenizer.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="tokenizer"
-    )
 
 # PREPROCESS THE DATASET
 
