@@ -51,7 +51,7 @@ class TrainingConfig:
 
     save_dir = "text-to-image"
     push_to_hub = True
-    pretrained_model_or_path = "stabilityai/stable-diffusion-xl-base-1.0"
+    pretrained_model_or_path = "runwayml/stable-diffusion-v1-5"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
 @dataclass
