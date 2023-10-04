@@ -224,6 +224,7 @@ def main():
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
 
     if jax.process_index() == 0:
+        # TODO : WE NEED TO REPLACE THE PIPELINE WITH OUR OWN PIPELINE
         scheduler = FlaxPNDMScheduler(
                 beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
             )
