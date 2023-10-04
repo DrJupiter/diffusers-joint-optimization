@@ -51,7 +51,7 @@ class TrainingConfig:
 
     save_dir = "text-to-image"
     push_to_hub = True
-    pretrained_model_or_path = "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = "duongna/stable-diffusion-v1-4-flax"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
 @dataclass
