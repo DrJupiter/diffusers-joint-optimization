@@ -19,25 +19,28 @@ dataset_name_mapping = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
 }
 
-def get_dataset(config):
+from ..config.utils import Config
 
+# TODO (KLAUS): FILL OUT CONFIG ATTRIBUTES
+
+def get_dataset(config: Config):
 
 # LOAD DATASET
-    if config.dataset_name is not None:
+    if config.training.dataset_name is not None:
     # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
-            config.dataset_name,
-            config.dataset_config_name,
-            cache_dir=config.cache_dir,
+            config.training.dataset_name,
+            config.training.dataset_config_name,
+            cache_dir=config.training.cache_dir,
         )
     else:
         data_files = {}
-        if config.train_data_dir is not None:
-            data_files["train"] = os.path.join(config.train_data_dir, "**")
+        if config.training.train_data_dir is not None:
+            data_files["train"] = os.path.join(config.training.train_data_dir, "**")
         dataset = load_dataset(
             "imagefolder",
             data_files=data_files,
-            cache_dir=config.cache_dir,
+            cache_dir=config.training.cache_dir,
         )
     
     column_names = dataset["train"].column_names
@@ -45,39 +48,38 @@ def get_dataset(config):
 
 # MAKE SURE THE KEY FOR ACCESING IMAGES AND LABELS IS CORRECT
 
-    dataset_columns = dataset_name_mapping.get(config.dataset_name, None)
+    dataset_columns = dataset_name_mapping.get(config.training.dataset_name, None)
 
-    if config.image_column is None:
+    if config.training.image_column is None:
         image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:
-        image_column = config.image_column
+        image_column = config.training.image_column
         if image_column not in column_names:
             raise ValueError(
-                f"--image_column' value '{config.image_column}' needs to be one of: {', '.join(column_names)}"
+                f"--image_column' value '{config.training.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     
-    if config.caption_column is None:
+    if config.training.caption_column is None:
         caption_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
     else:
-        caption_column = config.caption_column
+        caption_column = config.training.caption_column
         if caption_column not in column_names:
             raise ValueError(
-                f"--caption_column' value '{config.caption_column}' needs to be one of: {', '.join(column_names)}"
+                f"--caption_column' value '{config.training.caption_column}' needs to be one of: {', '.join(column_names)}"
             )
 
 # LOAD TOKENIZER
-# TODO (KLAUS): FIGURE OUT WHAT THE PRETRAIN PATH SHOULD BE
     tokenizer = CLIPTokenizer.from_pretrained(
-        config.pretrained_model_name_or_path, revision=config.revision, subfolder="tokenizer"
+        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="tokenizer"
     )
 
 # PREPROCESS THE DATASET
 
     train_transforms = transforms.Compose(
         [
-            transforms.Resize(config.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(config.resolution) if config.center_crop else transforms.RandomCrop(config.resolution),
-            transforms.RandomHorizontalFlip() if config.random_flip else transforms.Lambda(lambda x: x),
+            transforms.Resize(config.training.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(config.training.resolution) if config.training.center_crop else transforms.RandomCrop(config.training.resolution),
+            transforms.RandomHorizontalFlip() if config.training.random_flip else transforms.Lambda(lambda x: x),
             transforms.ToTensor(),
             transforms.Normalize([0.5], [0.5]),
         ]
@@ -110,8 +112,8 @@ def get_dataset(config):
         return examples
 
     # Resize the dataset if desired
-    if config.max_train_samples is not None:
-        dataset["train"] = dataset["train"].shuffle(seed=config.seed).select(range(config.max_train_samples))
+    if config.training.max_steps is not None:
+        dataset["train"] = dataset["train"].shuffle(seed=config.training.seed).select(range(config.training.max_steps))
 
     train_dataset = dataset["train"].with_transform(preprocess_train)
 
@@ -132,9 +134,9 @@ def get_dataset(config):
 
         return batch
 
-    total_train_batch_size = config.train_batch_size * jax.local_device_count()
+    
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=total_train_batch_size, drop_last=True
+        train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=config.training.total_batch_size, drop_last=True
     )
 
-    return train_dataloader
+    return train_dataset, train_dataloader
