@@ -47,7 +47,7 @@ class TrainingConfig:
     total_batch_size = batch_size * jax.local_device_count()
 
     max_steps = None
-    epochs = 2 
+    epochs = 10000 
 
     save_dir = "text-to-image"
     push_to_hub = True
