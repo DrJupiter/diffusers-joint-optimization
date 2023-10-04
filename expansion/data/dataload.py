@@ -19,7 +19,7 @@ dataset_name_mapping = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
 }
 
-from ..config.utils import Config
+from config.utils import Config
 
 # TODO (KLAUS): FILL OUT CONFIG ATTRIBUTES
 

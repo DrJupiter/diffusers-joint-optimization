@@ -14,7 +14,7 @@ class WandbConfig:
     project = "Special Course"
     image_amount = 4
 
-    experiment = None  # TODO: Write Code which derives this
+    experiment = "TTI"  # TODO: Write Code which derives this
 
 
 @dataclass
@@ -23,7 +23,7 @@ class TrainingConfig:
 
     target = "epsilon"
 
-    dataset_name = "huggan/pokemon"
+    dataset_name = "lambdalabs/pokemon-blip-captions"
     dataset_config_name = None # The config of the Dataset, leave as None if there's only one config.
 
     train_data_dir = None # A folder containing the training data. Folder contents must follow the structure described in https://huggingface.co/docs/datasets/image_dataset#imagefolder. In particular, a `metadata.jsonl` file
@@ -39,7 +39,7 @@ class TrainingConfig:
     random_flip = True
     resolution = 64
 
-
+# HYPER PARAMETERS
     seed = 0
 
     batch_size = 16

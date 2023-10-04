@@ -1,3 +1,6 @@
+import os
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
+
 import jax
 import jax.numpy as jnp
 
@@ -52,13 +55,16 @@ def main():
 # MODELS
 # TODO (KLAUS): INITIALIZE SDE AND ITS PARAMETERS
     text_encoder = FlaxCLIPTextModel.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="text_encoder", dtype=config.training.weight_dtype
+        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="text_encoder", dtype=config.training.weight_dtype,
+        cache_dir=config.training.cache_dir,
     )
     vae, vae_params = FlaxAutoencoderKL.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="vae", dtype=config.training.weight_dtype
+        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="vae", dtype=config.training.weight_dtype,
+        cache_dir=config.training.cache_dir,
     )
     unet, unet_params = FlaxUNet2DConditionModel.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype
+        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype,
+        cache_dir=config.training.cache_dir,
     )    
 
 # OPTIMIZER
@@ -220,3 +226,7 @@ def main():
         ).params,
             }
     save_local_cloud(config, params)
+
+
+if __name__ == "__main__":
+    main()
