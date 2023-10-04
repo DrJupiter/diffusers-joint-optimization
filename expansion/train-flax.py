@@ -207,7 +207,7 @@ def main():
 
         train_step_progress_bar.close()
         epochs.write(f"Epoch... ({epoch + 1}/{config.training.epochs} | Loss: {train_metric['loss']})")
-        # TODO (KLAUS) : LOG TRAIN METRIC TO WANDB
+        wandb.log({"loss": train_metric['loss']})
 
 # SAVE PARAMETERS
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
