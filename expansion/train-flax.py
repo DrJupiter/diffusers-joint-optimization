@@ -255,8 +255,8 @@ def main():
                 **params,
                 "scheduler": scheduler,
             }
-
-            image_grid = make_image_grid(pipeline(shard(prompt_ids), sampling_params, train_rngs)["images"])
+            print(prompt_ids.shape)
+            image_grid = make_image_grid(pipeline(prompt_ids, sampling_params, train_rngs)["images"])
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
             save_local_cloud(config, params, pipeline)
             
