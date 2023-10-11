@@ -77,7 +77,12 @@ def main():
 #        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype,
 #        cache_dir=config.training.cache_dir,
 #    )    
-    unet = FlaxUNet2DConditionModel(sample_size=64)
+    unet = FlaxUNet2DConditionModel(sample_size=64, 
+                                    in_channels=3,  # the number of input channels, 3 for RGB images
+    out_channels=3,  # the number of output channels
+    layers_per_block=4,  # how many ResNet layers to use per UNet block
+    block_out_channels=(128, 256, 512, 512),
+    cross_attention_dim=768,)
     unet_params = unet.init_weights(rng)
 
 # OPTIMIZER
@@ -120,8 +125,9 @@ def main():
             # Convert images to latent space
             # sample latents 
             latents = batch["pixel_values"]
-            latents = jnp.transpose(latents, (0, 3, 1, 2))
-            latents = latents
+            #print(latents.shape)
+            #latents = jnp.transpose(latents, (0, 3, 1, 2))
+            #latents = latents
 
             # Sample noise that we'll add to the latents
             noise_rng, timestep_rng = jax.random.split(sample_rng)
@@ -145,8 +151,6 @@ def main():
                 params=text_encoder_params,
                 train=False,
             )[0]
-            print(noisy_latents.shape)
-            print(encoder_hidden_states.shape)
             # Predict the noise residual and compute loss
             model_pred = unet.apply(
                 {"params": params}, noisy_latents, timesteps, encoder_hidden_states, train=True
