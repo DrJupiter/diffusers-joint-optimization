@@ -38,6 +38,8 @@ from flax import jax_utils
 
 from flax.training.common_utils import shard
 
+import numpy as np
+
 def main():
 
 # GET CONFIG & LOGGING
@@ -248,7 +250,7 @@ def main():
                         "safety_checker": safety_checker.params,
                     }
             
-            image_grid = make_image_grid(pipeline(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"], params, train_rngs[0])["images"])
+            image_grid = make_image_grid(pipeline(np.array(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"]), params, train_rngs[0])["images"])
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
             save_local_cloud(config, params, pipeline)
 
