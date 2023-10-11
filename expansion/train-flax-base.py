@@ -4,6 +4,9 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import jax
 import jax.numpy as jnp
 
+# load DNN library 
+jax.random.PRNGKey(0)
+
 import math
 from tqdm.auto import tqdm
 
@@ -51,6 +54,10 @@ def main():
     if config.training.seed is not None:
         set_seed(config.training.seed)
 
+# Initialize RNG
+    rng = jax.random.PRNGKey(config.training.seed)
+
+
 
 # DATASET & TOKENIZER
     tokenizer = CLIPTokenizer.from_pretrained(
@@ -65,14 +72,13 @@ def main():
         config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="text_encoder", dtype=config.training.weight_dtype,
         cache_dir=config.training.cache_dir,
     )
-    vae, vae_params = FlaxAutoencoderKL.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="vae", dtype=config.training.weight_dtype,
-        cache_dir=config.training.cache_dir,
-    )
-    unet, unet_params = FlaxUNet2DConditionModel.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype,
-        cache_dir=config.training.cache_dir,
-    )    
+  
+#    unet, unet_params = FlaxUNet2DConditionModel.from_pretrained(
+#        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype,
+#        cache_dir=config.training.cache_dir,
+#    )    
+    unet = FlaxUNet2DConditionModel(sample_size=64)
+    unet_params = unet.init_weights(rng)
 
 # OPTIMIZER
     optimizer_scheduler = optax.constant_schedule(config.optimizer.learning_rate)
@@ -101,25 +107,21 @@ def main():
         beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000
     )
     noise_scheduler_state = noise_scheduler.create_state()
-# Initialize our training
-    rng = jax.random.PRNGKey(config.training.seed)
-    train_rngs = jax.random.split(rng, jax.local_device_count())
+
 
 # TRAIN STEP
 
+    train_rngs = jax.random.split(rng, jax.local_device_count())
 
-    def train_step(state, text_encoder_params, vae_params, batch, train_rng):
+    def train_step(state, text_encoder_params, batch, train_rng):
         dropout_rng, sample_rng, new_train_rng = jax.random.split(train_rng, 3)
 
         def compute_loss(params):
             # Convert images to latent space
-            vae_outputs = vae.apply(
-                {"params": vae_params}, batch["pixel_values"], deterministic=True, method=vae.encode
-            )
-            latents = vae_outputs.latent_dist.sample(sample_rng)
-            # (NHWC) -> (NCHW)
+            # sample latents 
+            latents = batch["pixel_values"]
             latents = jnp.transpose(latents, (0, 3, 1, 2))
-            latents = latents * vae.config.scaling_factor
+            latents = latents
 
             # Sample noise that we'll add to the latents
             noise_rng, timestep_rng = jax.random.split(sample_rng)
@@ -180,7 +182,6 @@ def main():
 # Replicate the train state on each device
     state = jax_utils.replicate(state)
     text_encoder_params = jax_utils.replicate(text_encoder.params)
-    vae_params = jax_utils.replicate(vae_params)
 
 # TRAIN!
     num_update_steps_per_epoch = math.ceil(len(train_dataloader))
@@ -205,7 +206,7 @@ def main():
         # train
         for batch in train_dataloader:
             batch = shard(batch)
-            state, train_metric, train_rngs = p_train_step(state, text_encoder_params, vae_params, batch, train_rngs)
+            state, train_metric, train_rngs = p_train_step(state, text_encoder_params, batch, train_rngs)
             train_metrics.append(train_metric)
 
             train_step_progress_bar.update(1)
@@ -224,41 +225,11 @@ def main():
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
 
         if jax.process_index() == 0:
-            # TODO : WE NEED TO REPLACE THE PIPELINE WITH OUR OWN PIPELINE
-            scheduler = FlaxPNDMScheduler(
-                    beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
-                )
-
-            safety_checker = FlaxStableDiffusionSafetyChecker.from_pretrained(
-                    "CompVis/stable-diffusion-safety-checker", from_pt=True
-                )
-            pipeline = FlaxStableDiffusionPipeline(
-                    text_encoder=text_encoder,
-                    vae=vae,
-                    unet=unet,
-                    tokenizer=tokenizer,
-                    scheduler=scheduler,
-                    safety_checker=safety_checker,
-                    feature_extractor=CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32"),
-                )
-            params = {
-                        "text_encoder": get_params_to_save(text_encoder_params),
-                        "vae": get_params_to_save(vae_params),
-                        "unet": get_params_to_save(state.params),
-                        "safety_checker": safety_checker.params,
-                    }
-            prompt = ["a blue and black object with two eyes"] * jax.device_count() 
-            prompt_ids = pipeline.prepare_inputs(prompt)
-            sampling_params = {
-                **params,
-                "scheduler": scheduler,
-            }
-            print(prompt_ids.shape)
-            sample_keys = jax.random.split(train_rngs[0],3)[1]
-            print(sample_keys.shape)
-            image_grid = make_image_grid(pipeline(prompt_ids, sampling_params, sample_keys)["images"])
-            wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
-            save_local_cloud(config, params, pipeline)
+            
+            #image_grid = make_image_grid(pipeline(prompt_ids, sampling_params, sample_keys)["images"])
+            #wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
+            #save_local_cloud(config, params, pipeline)
+            pass
             
 
 
