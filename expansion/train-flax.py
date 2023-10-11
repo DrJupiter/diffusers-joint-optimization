@@ -249,7 +249,7 @@ def main():
                         "unet": get_params_to_save(state.params),
                         "safety_checker": safety_checker.params,
                     }
-            tokens = jnp.array(tokenizer(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"], max_length=tokenizer.model_max_length, padding="do_not_pad", truncation=True).input_ids)
+            tokens = jnp.array(tokenizer(["a blue and black object with two eyes"], max_length=tokenizer.model_max_length, padding="do_not_pad", truncation=True).input_ids)
             image_grid = make_image_grid(pipeline(tokens, params, train_rngs[0])["images"])
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
             save_local_cloud(config, params, pipeline)
