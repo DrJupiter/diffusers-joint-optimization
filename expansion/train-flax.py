@@ -256,7 +256,7 @@ def main():
                 "scheduler": scheduler,
             }
             print(prompt_ids.shape)
-            sample_keys = jax.random.split(train_rngs,3)[1]
+            sample_keys = jax.random.split(train_rngs[0],3)[1]
             print(sample_keys.shape)
             image_grid = make_image_grid(pipeline(prompt_ids, sampling_params, sample_keys)["images"])
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
