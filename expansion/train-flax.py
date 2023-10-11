@@ -206,6 +206,7 @@ def main():
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         # train
         for batch in train_dataloader:
+            break
             batch = shard(batch)
             state, train_metric, train_rngs = p_train_step(state, text_encoder_params, vae_params, batch, train_rngs)
             train_metrics.append(train_metric)
@@ -249,8 +250,8 @@ def main():
                         "unet": get_params_to_save(state.params),
                         "safety_checker": safety_checker.params,
                     }
-            
-            image_grid = make_image_grid(pipeline(np.array(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"]), params, train_rngs[0])["images"])
+            tokens = tokenizer(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"], max_length=tokenizer.model_max_length, padding="do_not_pad", truncation=True).input_ids
+            image_grid = make_image_grid(pipeline(tokens, params, train_rngs[0])["images"])
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
             save_local_cloud(config, params, pipeline)
 

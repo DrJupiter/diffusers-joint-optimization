@@ -81,7 +81,6 @@ def get_dataset(config: Config, tokenizer):
         ]
     )
 
-
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples, is_train=True):
         captions = []
