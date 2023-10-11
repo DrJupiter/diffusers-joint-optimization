@@ -252,10 +252,7 @@ def main():
             prompt = ["a blue and black object with two eyes"] * jax.device_count() 
             prompt_ids = pipeline.prepare_inputs(prompt)
             sampling_params = {
-                "text_encoder": text_encoder_params,
-                "vae": vae_params,
-                "unet": state.params,
-                "safety_checker": jax_utils.replicate(safety_checker.params),
+                **params,
                 "scheduler": scheduler,
             }
 
