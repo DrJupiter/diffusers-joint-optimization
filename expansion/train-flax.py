@@ -15,7 +15,7 @@ from transformers import set_seed, FlaxCLIPTextModel, CLIPImageProcessor, CLIPTo
 
 from diffusers.pipelines.stable_diffusion import FlaxStableDiffusionSafetyChecker
 
-from diffusers.utils import check_min_version
+from diffusers.utils import check_min_version, make_image_grid
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.22.0.dev0")
 
@@ -223,31 +223,34 @@ def main():
 # SAVE PARAMETERS
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
 
-    if jax.process_index() == 0:
-        # TODO : WE NEED TO REPLACE THE PIPELINE WITH OUR OWN PIPELINE
-        scheduler = FlaxPNDMScheduler(
-                beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
-            )
+        if jax.process_index() == 0:
+            # TODO : WE NEED TO REPLACE THE PIPELINE WITH OUR OWN PIPELINE
+            scheduler = FlaxPNDMScheduler(
+                    beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
+                )
 
-        safety_checker = FlaxStableDiffusionSafetyChecker.from_pretrained(
-                "CompVis/stable-diffusion-safety-checker", from_pt=True
-            )
-        pipeline = FlaxStableDiffusionPipeline(
-                text_encoder=text_encoder,
-                vae=vae,
-                unet=unet,
-                tokenizer=tokenizer,
-                scheduler=scheduler,
-                safety_checker=safety_checker,
-                feature_extractor=CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32"),
-            )
-        params = {
-                    "text_encoder": get_params_to_save(text_encoder_params),
-                    "vae": get_params_to_save(vae_params),
-                    "unet": get_params_to_save(state.params),
-                    "safety_checker": safety_checker.params,
-                }
-        save_local_cloud(config, params, pipeline)
+            safety_checker = FlaxStableDiffusionSafetyChecker.from_pretrained(
+                    "CompVis/stable-diffusion-safety-checker", from_pt=True
+                )
+            pipeline = FlaxStableDiffusionPipeline(
+                    text_encoder=text_encoder,
+                    vae=vae,
+                    unet=unet,
+                    tokenizer=tokenizer,
+                    scheduler=scheduler,
+                    safety_checker=safety_checker,
+                    feature_extractor=CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32"),
+                )
+            params = {
+                        "text_encoder": get_params_to_save(text_encoder_params),
+                        "vae": get_params_to_save(vae_params),
+                        "unet": get_params_to_save(state.params),
+                        "safety_checker": safety_checker.params,
+                    }
+            
+            image_grid = make_image_grid(pipeline(["a blue and black object with two eyes", "a drawing of a dragon sitting on its hind legs", "a blue and white bird with a long tail", "a pink cartoon character with big eyes"], params, train_rngs[0])["images"])
+            wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
+            save_local_cloud(config, params, pipeline)
 
 
 if __name__ == "__main__":
