@@ -150,15 +150,22 @@ class FlaxScoreSdeVeScheduler(FlaxSchedulerMixin, ConfigMixin):
             sampling_eps (`float`, optional):
                 final timestep value (overrides value given at Scheduler instantiation).
         """
+        # set based on input if given, else take from config
         sigma_min = sigma_min if sigma_min is not None else self.config.sigma_min
         sigma_max = sigma_max if sigma_max is not None else self.config.sigma_max
         sampling_eps = sampling_eps if sampling_eps is not None else self.config.sampling_eps
+
+        # if timestep has not been set in state, set it now
         if state.timesteps is None:
             state = self.set_timesteps(state, num_inference_steps, sampling_eps)
 
+        # create exp(sigma) for N sigams betweeen min and max, such that they are evenly spaced in linear space 
         discrete_sigmas = jnp.exp(jnp.linspace(jnp.log(sigma_min), jnp.log(sigma_max), num_inference_steps))
+
+        # s_min * (s_max/s_min)^t   forall t in state.timesteps
         sigmas = jnp.array([sigma_min * (sigma_max / sigma_min) ** t for t in state.timesteps])
 
+        # return state with replaced sigmas
         return state.replace(discrete_sigmas=discrete_sigmas, sigmas=sigmas)
 
     def get_adjacent_sigma(self, state, timesteps, t):
@@ -196,16 +203,20 @@ class FlaxScoreSdeVeScheduler(FlaxSchedulerMixin, ConfigMixin):
                 "`state.timesteps` is not set, you need to run 'set_timesteps' after creating the scheduler"
             )
 
+        # make timestep into an array the same shape as sample count [ts,ts,ts,ts]
         timestep = timestep * jnp.ones(
-            sample.shape[0],
-        )
+            sample.shape[0],)
+        
+        # multiply with number of timesteps in state?
+            # Not sure why this makes sense yet
         timesteps = (timestep * (len(state.timesteps) - 1)).long()
 
+        # get sigmas from state 
         sigma = state.discrete_sigmas[timesteps]
+        # get adj sigmas
         adjacent_sigma = self.get_adjacent_sigma(state, timesteps, timestep)
-        drift = jnp.zeros_like(sample)
-        diffusion = (sigma**2 - adjacent_sigma**2) ** 0.5
-
+        drift = jnp.zeros_like(sample) #  f(t)=0 since s(t)=1, drift = F
+        diffusion = (sigma**2 - adjacent_sigma**2) ** 0.5 # diffusion = L
         # equation 6 in the paper: the model_output modeled by the network is grad_x log pt(x)
         # also equation 47 shows the analog from SDE models to ancestral sampling methods
         diffusion = diffusion.flatten()
@@ -215,9 +226,13 @@ class FlaxScoreSdeVeScheduler(FlaxSchedulerMixin, ConfigMixin):
         #  equation 6: sample noise for the diffusion term of
         key = random.split(key, num=1)
         noise = random.normal(key=key, shape=sample.shape)
+        
+        # find 
         prev_sample_mean = sample - drift  # subtract because `dt` is a small negative timestep
         # TODO is the variable diffusion the correct scaling term for the noise?
         prev_sample = prev_sample_mean + diffusion * noise  # add impact of diffusion field g
+
+        # prev_sample = sample - (drift - (sigma**2 - adjacent_sigma**2) * model_output) + ((sigma**2 - adjacent_sigma**2) ** 0.5) * noise
 
         if not return_dict:
             return (prev_sample, prev_sample_mean, state)

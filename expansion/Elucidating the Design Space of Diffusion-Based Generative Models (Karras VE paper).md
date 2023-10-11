@@ -273,3 +273,31 @@ Which is equivalent to if we insert alpha
 
 $$[1-e^{-\int_0^t \beta(s) ds}]^2 = 1-e^{-\int_0^t \beta(s) ds}+e^{-2\int_0^t \beta(s) ds}$$
 
+
+
+
+# Does it match?
+
+
+Given forward ODE (4) from paper:
+
+$$score = \cfrac{D_{\theta}\left(\cfrac{x}{s(t)},\sigma(t)\right)}{\sigma(t)^2}$$
+$$dx = \cfrac{\dot s(t)}{s(t)} x - s(t)^2 \dot \sigma(t)\sigma(t) ~~ score ~~ dt$$
+Inserting $score$ we get
+$$dx = \cfrac{\dot s(t)}{s(t)} x - s(t)^2 \dot \sigma(t)\sigma(t) \cfrac{D_{\theta}\left(\cfrac{x}{s(t)},\sigma(t)\right)}{\sigma(t)^2} dt$$
+
+$$dx = \cfrac{\dot s(t)}{s(t)} x - \cfrac{s(t)^2 \dot \sigma(t)}{\sigma(t)} D_{\theta}\left(\cfrac{x}{s(t)},\sigma(t)\right) dt$$
+(cant see how this becomes algo 1), but if we look for algo 2 and 3 we find them.
+
+
+If we insert $s(t)=1$ and score
+$$dx = 0 - 1 \dot \sigma(t) \sigma(t) \cfrac{D(x,\sigma(t))}{\sigma(t)^2} dt$$
+$$dx = 0 - 1 \dot \sigma(t) \cfrac{D(x,\sigma(t))}{\sigma(t)} dt$$
+If we insert $\sigma(t) = t$
+
+$$dx = 0 - 1 \cdot 1 \cfrac{D(x,\sigma(t))}{t} dt$$
+$$dx = \cfrac{D(x,\sigma(t))}{t} dt$$
+
+Thus we have 
+- Algo 3 line 5
+- Algo 2 line 7
