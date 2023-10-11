@@ -145,7 +145,8 @@ def main():
                 params=text_encoder_params,
                 train=False,
             )[0]
-
+            print(noisy_latents.shape)
+            print(encoder_hidden_states.shape)
             # Predict the noise residual and compute loss
             model_pred = unet.apply(
                 {"params": params}, noisy_latents, timesteps, encoder_hidden_states, train=True
