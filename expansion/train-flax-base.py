@@ -22,6 +22,8 @@ from diffusers.utils import check_min_version, make_image_grid
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.22.0.dev0")
 
+from PIL import Image
+
 import wandb
 
 
@@ -196,8 +198,9 @@ def main():
 
         return new_state, metrics, new_train_rng
 
-    def generate_image(state,text_encoder_params, batch, train_rng):
-        sample_rng, new_train_rng = jax.random.split(train_rng, 2)
+    
+    def setup_noise(text_encoder_params, batch, train_rng):
+        sample_rng, _ = jax.random.split(train_rng, 2)
 
         latents = jnp.zeros_like(batch["pixel_values"])
         #print(latents.shape)
@@ -205,7 +208,7 @@ def main():
         #latents = latents
 
         # Sample noise that we'll add to the latents
-        noise_rng, timestep_rng = jax.random.split(sample_rng)
+        noise_rng, _ = jax.random.split(sample_rng)
         noise = jax.random.normal(noise_rng, latents.shape)
         # Sample a random timestep for each image
         bsz = latents.shape[0]
@@ -221,20 +224,43 @@ def main():
             params=text_encoder_params,
             train=False,
         )[0]
+
+        return timesteps, encoder_hidden_states, noisy_latents
+
+    p_setup_noise = jax.pmap(setup_noise, "batch") 
+
+    def inference_step(state, time, noisy_image, timesteps, encoder_hidden_states):
+        model_pred = unet.apply(
+                {"params": state.params}, noisy_image, timesteps, encoder_hidden_states, train=False
+            ).sample
+        noisy_image = noise_scheduler.step(noise_scheduler_state, model_pred, time, noisy_image).prev_sample
+        timesteps -= 1
+        return state, noisy_image, timesteps, encoder_hidden_states 
+    p_inference_step = jax.pmap(inference_step, donate_argnums=(0,1,))
+
+    def generate_image(state,text_encoder_params, batch, train_rng):
+        
         # Predict the noise residual and compute loss
 
-        for _ in reversed(range(noise_scheduler.config.num_train_timesteps)):
+#        for _ in reversed(range(noise_scheduler.config.num_train_timesteps)):
+#            model_pred = unet.apply(
+#                {"params": state.params}, noisy_latents, timesteps, encoder_hidden_states, train=False
+#            ).sample
+#            noisy_latents = noise_scheduler.step(noise_scheduler_state, model_pred, _, noisy_latents).prev_sample
+#            timesteps -= 1
 
-            model_pred = unet.apply(
-                {"params": state.params}, noisy_latents, timesteps, encoder_hidden_states, train=False
-            ).sample
-            noisy_latents = noise_scheduler.step(noise_scheduler_state, model_pred, _, noisy_latents).prev_sample
-            timesteps -= 1
-        image = jnp.clip(noisy_latents/ 2 + 0.5, 0, 1)
+        timesteps, encoder_hidden_states, noisy_image = p_setup_noise(text_encoder_params, batch, train_rng)
+        for t in noise_scheduler_state.timesteps:
+
+            state, noisy_image, timesteps, encoder_hidden_states = p_inference_step(state, jnp.array([[t]]), noisy_image, timesteps, encoder_hidden_states) 
+
+        noisy_image = jax_utils.unreplicate(noisy_image)
+        image = jnp.clip(noisy_image/ 2 + 0.5, 0, 1)
+        image = jnp.round(jnp.transpose(image, (0, 2, 3, 1))*255)
         return state, image
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
-    p_generate_image = jax.pmap(generate_image, "batch", donate_argnums=(0,))
+    p_generate_image = generate_image #jax.pmap(generate_image, "batch", donate_argnums=(0,))
 
 # Replicate the train state on each device
     state = jax_utils.replicate(state)
@@ -276,13 +302,14 @@ def main():
 
         train_step_progress_bar.close()
         epochs.write(f"Epoch... ({epoch + 1}/{config.training.epochs} | Loss: {train_metric['loss']})")
-        wandb.log({"loss": train_metric['loss']})
+        wandb.log({"loss": train_metric['loss']}, step = global_step)
 
 # SAVE PARAMETERS
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
-
-        if jax.process_index() == 0:
+        
+        if (jax.process_index() == 0) and (global_step % 10 == 0):
             state, images = p_generate_image(state, text_encoder_params, batch, train_rngs)
+            wandb.log({"image": wandb.Image(make_image_grid([Image.fromarray(image) for image in np.array(images.astype(np.uint8))], 4,4))}, step = global_step)
 
 if __name__ == "__main__":
     main()
