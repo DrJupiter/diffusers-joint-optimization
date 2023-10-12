@@ -78,10 +78,26 @@ def main():
 #        cache_dir=config.training.cache_dir,
 #    )    
     unet = FlaxUNet2DConditionModel(sample_size=64, 
-                                    in_channels=3,  # the number of input channels, 3 for RGB images
+                                        in_channels=3,  # the number of input channels, 3 for RGB images
     out_channels=3,  # the number of output channels
-    layers_per_block=3,  # how many ResNet layers to use per UNet block
-    block_out_channels=(128, 256, 256, 512),
+    layers_per_block=2,  # how many ResNet layers to use per UNet block
+    block_out_channels=(64, 64, 128, 128, 256, 256),  # the number of output channels for each UNet block
+    down_block_types=(
+        "DownBlock2D",  # a regular ResNet downsampling block
+        "DownBlock2D",
+        "DownBlock2D",
+        "DownBlock2D",
+        "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+        "DownBlock2D",
+    ),
+    up_block_types=(
+        "UpBlock2D",  # a regular ResNet upsampling block
+        "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+        "UpBlock2D",
+        "UpBlock2D",
+        "UpBlock2D",
+        "UpBlock2D",
+    ),
     cross_attention_dim=768,)
     unet_params = unet.init_weights(rng)
 
@@ -180,9 +196,45 @@ def main():
 
         return new_state, metrics, new_train_rng
 
+    def generate_image(state,text_encoder_params, batch, train_rng):
+        sample_rng, new_train_rng = jax.random.split(train_rng, 2)
 
+        latents = jnp.zeros_like(batch["pixel_values"])
+        #print(latents.shape)
+        #latents = jnp.transpose(latents, (0, 3, 1, 2))
+        #latents = latents
+
+        # Sample noise that we'll add to the latents
+        noise_rng, timestep_rng = jax.random.split(sample_rng)
+        noise = jax.random.normal(noise_rng, latents.shape)
+        # Sample a random timestep for each image
+        bsz = latents.shape[0]
+        timesteps = (jax.numpy.ones((bsz,)) * int(noise_scheduler.config.num_train_timesteps-1)).astype(int)
+
+        # Add noise to the latents according to the noise magnitude at each timestep
+        # (this is the forward diffusion process)
+        noisy_latents = noise_scheduler.add_noise(noise_scheduler_state, latents, noise, timesteps)
+
+        # Get the text embedding for conditioning
+        encoder_hidden_states = text_encoder(
+            batch["input_ids"],
+            params=text_encoder_params,
+            train=False,
+        )[0]
+        # Predict the noise residual and compute loss
+
+        for _ in reversed(range(noise_scheduler.config.num_train_timesteps)):
+
+            model_pred = unet.apply(
+                {"params": state.params}, noisy_latents, timesteps, encoder_hidden_states, train=False
+            ).sample
+            noisy_latents = noise_scheduler.step(noise_scheduler_state, model_pred, _, noisy_latents).prev_sample
+            timesteps -= 1
+        image = jnp.clip(noisy_latents/ 2 + 0.5, 0, 1)
+        return state, image
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+    p_generate_image = jax.pmap(generate_image, "batch", donate_argnums=(0,))
 
 # Replicate the train state on each device
     state = jax_utils.replicate(state)
@@ -230,13 +282,7 @@ def main():
     # TODO (KLAUS): SAVE THE OPTIMIZER's AND SDE's PARAMETERS too
 
         if jax.process_index() == 0:
-            
-            #image_grid = make_image_grid(pipeline(prompt_ids, sampling_params, sample_keys)["images"])
-            #wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
-            #save_local_cloud(config, params, pipeline)
-            pass
-            
-
+            state, images = p_generate_image(state, text_encoder_params, batch, train_rngs)
 
 if __name__ == "__main__":
     main()

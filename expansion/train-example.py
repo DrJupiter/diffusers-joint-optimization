@@ -3,7 +3,6 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import jax
 import sys
 key = jax.random.PRNGKey(0)
-from diffusers import UNet2DModel, UNet2DConditionModel, FlaxUNet2DConditionModel
 
 
 # Define config
@@ -68,9 +67,8 @@ train_dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.train_
 
 # Define the model
 
-from diffusers import UNet2DModel, UNet2DConditionModel, FlaxUNet2DConditionModel
-flax_model = FlaxUNet2DConditionModel(64)
-params = flax_model.init_weights(jax.random.PRNGKey(0))
+from diffusers import UNet2DModel, UNet2DConditionModel 
+
 UNet2DConditionModel(
     sample_size=config.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
@@ -95,7 +93,6 @@ UNet2DConditionModel(
     ),
 )
 
-sys.exit(0)
 model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
     in_channels=3,  # the number of input channels, 3 for RGB images
