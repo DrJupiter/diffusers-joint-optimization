@@ -37,7 +37,7 @@ class TrainingConfig:
 
     center_crop = False
     random_flip = True
-    resolution = 64
+    resolution = 32
 
 # HYPER PARAMETERS
     seed = 0
@@ -62,8 +62,11 @@ class OptimizerConfig:
     scale_lr = False # Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.
 
     # TODO (KLAUS) : CODE IN THE OTHER OPTIMIZERS
-    lr_scheduler = "constant" # 'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]'
+    lr_scheduler = "cosine" # 'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]'
 
+    # cosine parameters
+    warmup_steps = 500
+    init_value = 4e-7
 
     # adam parameters
     adam_beta1 = 0.9
@@ -71,7 +74,9 @@ class OptimizerConfig:
     adam_weight_decay = 1e-2
     adam_epsilon = 1e-8
 
-    max_grad_norm = 1
+    max_grad_norm = 1.0
+
+    
 
 @dataclass
 class SDEConfig:

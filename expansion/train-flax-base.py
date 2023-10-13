@@ -68,6 +68,11 @@ def main():
 
     train_dataset, train_dataloader = get_dataset(config, tokenizer)  
 
+# CALCULATE NUMBER OF TRAINING STEPS
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader))
+
+    if config.training.max_steps is None:
+        config.training.max_steps = config.training.epochs * num_update_steps_per_epoch
 # MODELS
 # TODO (KLAUS): INITIALIZE SDE AND ITS PARAMETERS
     text_encoder = FlaxCLIPTextModel.from_pretrained(
@@ -79,11 +84,11 @@ def main():
 #        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", dtype=config.training.weight_dtype,
 #        cache_dir=config.training.cache_dir,
 #    )    
-    unet = FlaxUNet2DConditionModel(sample_size=64, 
+    unet = FlaxUNet2DConditionModel(sample_size=32, 
                                         in_channels=3,  # the number of input channels, 3 for RGB images
     out_channels=3,  # the number of output channels
-    layers_per_block=2,  # how many ResNet layers to use per UNet block
-    block_out_channels=(64, 64, 128, 128, 256, 256),  # the number of output channels for each UNet block
+    layers_per_block=3,  # how many ResNet layers to use per UNet block
+    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     down_block_types=(
         "DownBlock2D",  # a regular ResNet downsampling block
         "DownBlock2D",
@@ -104,7 +109,15 @@ def main():
     unet_params = unet.init_weights(rng)
 
 # OPTIMIZER
-    optimizer_scheduler = optax.constant_schedule(config.optimizer.learning_rate)
+    if config.optimizer.lr_scheduler == "constant":
+        optimizer_scheduler = optax.constant_schedule(config.optimizer.learning_rate)
+    elif config.optimizer.lr_scheduler == "cosine":
+        optimizer_scheduler = optax.warmup_cosine_decay_schedule(
+            init_value=config.optimizer.init_value,
+            peak_value=config.optimizer.learning_rate,
+            warmup_steps=config.optimizer.warmup_steps,
+            decay_steps=config.training.max_steps
+            )
 
     adamw = optax.adamw(
         learning_rate=optimizer_scheduler,
@@ -267,10 +280,7 @@ def main():
     text_encoder_params = jax_utils.replicate(text_encoder.params)
 
 # TRAIN!
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader))
 
-    if config.training.max_steps is None:
-        config.training.max_steps = config.training.epochs * num_update_steps_per_epoch
 
     config.training.epochs = math.ceil(config.training.max_steps / num_update_steps_per_epoch)
 
