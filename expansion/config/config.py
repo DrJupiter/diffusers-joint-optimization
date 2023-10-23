@@ -52,7 +52,7 @@ class TrainingConfig:
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
     max_steps = None
-    epochs = 10000 
+    epochs = 100 
 
     save_dir = "text-to-image"
     push_to_hub = True
