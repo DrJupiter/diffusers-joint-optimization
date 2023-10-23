@@ -159,8 +159,9 @@ def main():
                 lr_scheduler.step()
                 optimizer.zero_grad()
             
-            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step}
             accelerator.log(logs, step=global_step)
+            global_step+= 1
 
             if global_step >= config.training.max_steps:
                 break
