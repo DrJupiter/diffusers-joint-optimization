@@ -19,7 +19,12 @@ class WandbConfig:
 
 @dataclass
 class TrainingConfig:
+
+    # JAX
     weight_dtype = jnp.float32
+
+    # TORCH
+    mixed_precision = "fp16" # `no` for float32, `fp16` for automatic mixed precision
 
     target = "epsilon"
 
@@ -44,7 +49,7 @@ class TrainingConfig:
 
     batch_size = 16
 
-    total_batch_size = batch_size * jax.local_device_count()
+    total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
     max_steps = None
     epochs = 10000 
