@@ -50,6 +50,7 @@ def main():
         project_config=accelerator_project_config,
         log_with="wandb"
     ) 
+    accelerator.init_trackers()
     print(f"Training on device: {accelerator.device}")
 
     if accelerator.is_main_process:
