@@ -176,7 +176,7 @@ image = pipeline(prompt=prompt, image=init_image, mask_image=mask_image, generat
 
 Image features - like quality and "creativity" - are dependent on pipeline parameters. Knowing what these parameters do is important for getting the results you want. Let's take a look at the most important parameters and see how changing them affects the output.
 
-## Strength
+### Strength
 
 `strength` is a measure of how much noise is added to the base image, which influences how similar the output is to the base image.
 
@@ -217,7 +217,7 @@ image = pipeline(prompt=prompt, image=init_image, mask_image=mask_image, strengt
   </div>
 </div>
 
-## Guidance scale
+### Guidance scale
 
 `guidance_scale` affects how aligned the text prompt and generated image are.
 
@@ -574,7 +574,7 @@ image
 
 ## Optimize
 
-It can be difficult and slow to run diffusion models if you're resource constrained, but it dosen't have to be with a few optimization tricks. One of the biggest (and easiest) optimizations you can enable is switching to memory-efficient attention. If you're using PyTorch 2.0, [scaled-dot product attention](../optimization/torch2.0#scaled-dot-product-attention) is automatically enabled and you don't need to do anything else. For non-PyTorch 2.0 users, you can install and use [xFormers](../optimization/xformers)'s implementation of memory-efficient attention. Both options reduce memory usage and accelerate inference.
+It can be difficult and slow to run diffusion models if you're resource constrained, but it doesn't have to be with a few optimization tricks. One of the biggest (and easiest) optimizations you can enable is switching to memory-efficient attention. If you're using PyTorch 2.0, [scaled-dot product attention](../optimization/torch2.0#scaled-dot-product-attention) is automatically enabled and you don't need to do anything else. For non-PyTorch 2.0 users, you can install and use [xFormers](../optimization/xformers)'s implementation of memory-efficient attention. Both options reduce memory usage and accelerate inference.
 
 You can also offload the model to the GPU to save even more memory:
 
