@@ -42,7 +42,7 @@ class TrainingConfig:
 
     center_crop = False
     random_flip = True
-    resolution = 64
+    resolution = 128
 
 # HYPER PARAMETERS
     seed = 0
