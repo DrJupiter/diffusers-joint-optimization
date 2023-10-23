@@ -48,11 +48,13 @@ def main():
     accelerator = Accelerator(
         mixed_precision=config.training.mixed_precision[0],
         project_config=accelerator_project_config,
+        log_with="wandb"
     ) 
     print(f"Training on device: {accelerator.device}")
 
     if accelerator.is_main_process:
-        wandb.init(**get_wandb_input(config))
+        log_kwargs = {"wandb": get_wandb_input(config)}
+
 # LOAD DATA
 
 
@@ -157,10 +159,7 @@ def main():
                 optimizer.zero_grad()
             
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
-
-            if accelerator.is_main_process:
-
-                wandb.log(logs, step=global_step)
+            accelerator.log(logs, step=global_step, log_kwargs=log_kwargs)
 
             if global_step >= config.training.max_steps:
                 break
@@ -175,7 +174,7 @@ def main():
 
             images = pipeline(prompt=prompts, generator=torch.manual_seed(config.training.seed)).images
             image_grid = make_image_grid(images, rows=3,cols=2)
-            wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
+            accelerator.log({"image": wandb.Image(image_grid)}, step=global_step, log_kwargs=log_kwargs)
         
 if __name__ == "__main__":
     main()
