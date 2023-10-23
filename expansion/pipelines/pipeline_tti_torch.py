@@ -95,7 +95,7 @@ class UTTIPipeline(DiffusionPipeline):
         else:
             raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
 
-        text_input = self.tokenizer(prompt, max_length=self.tokenizer.model_max_length, padding="do_not_pad", truncation=True).input_ids.to(self._execution_device)
+        text_input = torch.stack(self.tokenizer(prompt, max_length=self.tokenizer.model_max_length, padding="do_not_pad", truncation=True).input_ids).to(self._execution_device)
 
         prompt_embeddings = self.text_encoder(text_input)[0]
 

@@ -34,7 +34,6 @@ def main():
 
     config = Config()
 
-    wandb.init(**get_wandb_input(config))
 
 # SET SEED
     if config.training.seed is not None:
@@ -52,6 +51,8 @@ def main():
     ) 
     print(f"Training on device: {accelerator.device}")
 
+    if accelerator.is_main_process:
+        wandb.init(**get_wandb_input(config))
 # LOAD DATA
 
 
@@ -156,7 +157,10 @@ def main():
                 optimizer.zero_grad()
             
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
-            wandb.log(logs, step=global_step)
+
+            if accelerator.is_main_process:
+
+                wandb.log(logs, step=global_step)
 
             if global_step >= config.training.max_steps:
                 break
