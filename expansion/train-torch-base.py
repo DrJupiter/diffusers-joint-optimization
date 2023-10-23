@@ -168,7 +168,7 @@ def main():
 
         if accelerator.is_main_process: 
             
-            pipeline = UTTIPipeline(unet, noise_scheduler, tokenizer, text_encoder)
+            pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
             prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail"]
