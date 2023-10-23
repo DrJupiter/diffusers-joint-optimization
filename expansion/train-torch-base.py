@@ -171,12 +171,10 @@ def main():
             pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
-            prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail"]
+            prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes"]
 
             images = pipeline(prompt=prompts, generator=torch.manual_seed(config.training.seed)).images
-            print(len(images))
-            print(type(images[0]))
-            image_grid = make_image_grid(images, rows=2,cols=2)
+            image_grid = make_image_grid(images, rows=3,cols=2)
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
         
 if __name__ == "__main__":
