@@ -174,6 +174,7 @@ def main():
             prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail"]
 
             images = pipeline(prompt=prompts, generator=torch.manual_seed(config.training.seed)).images
+            print(images.shape)
             image_grid = make_image_grid(images, rows=2,cols=2)
             wandb.log({"image": wandb.Image(image_grid)}, step=global_step)
         
