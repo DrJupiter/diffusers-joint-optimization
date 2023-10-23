@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import jax
-
+import torch
 from dataclasses import dataclass
 
 
@@ -24,7 +24,7 @@ class TrainingConfig:
     weight_dtype = jnp.float32
 
     # TORCH
-    mixed_precision = "fp16" # `no` for float32, `fp16` for automatic mixed precision
+    mixed_precision = ("fp16", torch.float16) # `no` for float32, `fp16` for automatic mixed precision
 
     target = "epsilon"
 
@@ -56,7 +56,7 @@ class TrainingConfig:
 
     save_dir = "text-to-image"
     push_to_hub = True
-    pretrained_model_or_path = "duongna/stable-diffusion-v1-4-flax"
+    pretrained_model_or_path ="CompVis/stable-diffusion-v1-4" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
 @dataclass

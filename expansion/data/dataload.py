@@ -23,7 +23,11 @@ from config.utils import Config
 
 # TODO (KLAUS): FILL OUT CONFIG ATTRIBUTES
 
-def get_dataset(config: Config, tokenizer):
+def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator = None):
+
+    assert interface in ["torch", "jax"], f"Iterface {interface} not found place choose torch/jax"
+    if interface == "torch":
+        assert accelerator is not None, f"For the {interface} you must supply an accelerator"
 
 # LOAD DATASET
     if config.training.dataset_name is not None:
@@ -94,7 +98,12 @@ def get_dataset(config: Config, tokenizer):
                 raise ValueError(
                     f"Caption column `{caption_column}` should contain either strings or lists of strings."
                 )
-        inputs = tokenizer(captions, max_length=tokenizer.model_max_length, padding="do_not_pad", truncation=True)
+            
+        if interface == "jax":
+            inputs = tokenizer(captions, max_length=tokenizer.model_max_length, padding="do_not_pad", truncation=True)
+        elif interface == "torch":
+            inputs = tokenizer(captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt")
+            
         input_ids = inputs.input_ids
         return input_ids
     
@@ -106,11 +115,21 @@ def get_dataset(config: Config, tokenizer):
 
         return examples
 
-    # Resize the dataset if desired
-    if config.training.max_steps is not None:
-        dataset["train"] = dataset["train"].shuffle(seed=config.training.seed).select(range(config.training.max_steps))
+    # In a function to avoid repeating code
+    def apply_transform():
+        # Resize the dataset if desired
+        if config.training.max_steps is not None:
+            dataset["train"] = dataset["train"].shuffle(seed=config.training.seed).select(range(config.training.max_steps))
 
-    train_dataset = dataset["train"].with_transform(preprocess_train)
+        train_dataset = dataset["train"].with_transform(preprocess_train)
+        return train_dataset
+    
+    if interface == "jax":
+        train_dataset = apply_transform()
+    elif interface == "torch":
+        with accelerator.main_process_first():
+            train_dataset = apply_transform()
+
 
 
     def collate_fn(examples):
@@ -118,14 +137,19 @@ def get_dataset(config: Config, tokenizer):
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         input_ids = [example["input_ids"] for example in examples]
 
-        padded_tokens = tokenizer.pad(
-            {"input_ids": input_ids}, padding="max_length", max_length=tokenizer.model_max_length, return_tensors="pt"
-        )
-        batch = {
-            "pixel_values": pixel_values,
-            "input_ids": padded_tokens.input_ids,
-        }
-        batch = {k: v.numpy() for k, v in batch.items()}
+        if interface == "jax":
+
+            padded_tokens = tokenizer.pad(
+                {"input_ids": input_ids}, padding="max_length", max_length=tokenizer.model_max_length, return_tensors="pt"
+            )
+            batch = {
+                "pixel_values": pixel_values,
+                "input_ids": padded_tokens.input_ids,
+            }
+            batch = {k: v.numpy() for k, v in batch.items()}
+
+        elif interface == "torch":
+            batch = {"pixel_values": pixel_values, "input_ids": torch.stack(input_ids)}
 
         return batch
 
