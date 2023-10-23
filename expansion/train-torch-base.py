@@ -56,8 +56,6 @@ def main():
         log_kwargs = {"wandb": get_wandb_input(config)}
         project_name = log_kwargs["wandb"].pop("project")
         accelerator.init_trackers(project_name, init_kwargs=log_kwargs)
-    import sys
-    sys.exit(0)
 # LOAD DATA
 
 
