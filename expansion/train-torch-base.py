@@ -27,7 +27,7 @@ from PIL import Image
 
 import wandb
 
-from diffusers import (DDPMScheduler, UNet2DConditionModel, ScoreSdeVeScheduler)
+from diffusers import (DDPMScheduler,DDIMScheduler, UNet2DConditionModel, ScoreSdeVeScheduler)
 from diffusers.optimization import get_cosine_schedule_with_warmup
 
 def main():
@@ -124,7 +124,7 @@ def main():
 
 # NOISE SCHEDULAR
 
-    noise_scheduler = ScoreSdeVeScheduler(sigma_max=5)
+    noise_scheduler = DDIMScheduler()
 
 # TRAIN
 
@@ -163,12 +163,11 @@ def main():
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
                 model_pred = unet(noisy_images, timesteps, encoder_hidden_states).sample
-                target = z
-#                if noise_scheduler.config.prediction_type == "epsilon":
-#                    target = z
-#                else:
-#                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-#
+                if noise_scheduler.config.prediction_type == "epsilon":
+                    target = z
+                else:
+                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
 
                 avg_loss = accelerator.gather(loss.repeat(config.training.batch_size)).mean()
