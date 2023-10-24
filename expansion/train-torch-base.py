@@ -27,7 +27,7 @@ from PIL import Image
 
 import wandb
 
-from diffusers import (DDPMScheduler, UNet2DConditionModel)
+from diffusers import (DDPMScheduler, UNet2DConditionModel, ScoreSdeVeScheduler)
 from diffusers.optimization import get_cosine_schedule_with_warmup
 
 def main():
@@ -124,7 +124,7 @@ def main():
 
 # NOISE SCHEDULAR
 
-    noise_scheduler = DDPMScheduler()
+    noise_scheduler = ScoreSdeVeScheduler(sigma_max=5)
 
 # TRAIN
 
