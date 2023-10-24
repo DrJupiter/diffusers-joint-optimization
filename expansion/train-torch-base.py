@@ -163,12 +163,12 @@ def main():
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
                 model_pred = unet(noisy_images, timesteps, encoder_hidden_states).sample
-
-                if noise_scheduler.config.prediction_type == "epsilon":
-                    target = z
-                else:
-                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-
+                target = z
+#                if noise_scheduler.config.prediction_type == "epsilon":
+#                    target = z
+#                else:
+#                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+#
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
 
                 avg_loss = accelerator.gather(loss.repeat(config.training.batch_size)).mean()
