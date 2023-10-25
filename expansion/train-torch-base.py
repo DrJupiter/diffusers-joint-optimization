@@ -44,7 +44,8 @@ def main():
         set_seed(config.training.seed)
 
     # jax rng
-    key = jax.random.PRNGKey(config.training.seed)
+    #key = jax.random.PRNGKey(config.training.seed)
+    key = 0
 
 # ACCELERATOR
 
