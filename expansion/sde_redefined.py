@@ -235,10 +235,13 @@ class SDE:
 
             Fx = self.mean(t, n_x) 
             # print("Fx =",Fx) # TODO (KLAUS): try print(f"{Fx=}") and observe magic
+            print(Fx.shape)
             L = self.diffusion(t)
+            print(L.shape)
             # print("L =",L)
 
             if self.diffusion.diagonal_form:
+                L = L.squeeze(1)
                 diffusion_term = - L * L * model_output + L * noise
             else:
                 diffusion_term = - L @ L.T @ model_output + L @ noise
