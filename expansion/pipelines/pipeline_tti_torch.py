@@ -141,6 +141,12 @@ class UTTIPipeline(DiffusionPipeline):
                 sys.exit(0)
             image, key = self.scheduler.step(model_output, t, image, key, dt, device)
 
+            if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
+                print(t)
+                print("nan values in image")
+                import sys
+                sys.exit()
+        
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
