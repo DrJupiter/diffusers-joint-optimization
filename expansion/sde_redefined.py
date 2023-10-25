@@ -197,8 +197,8 @@ class SDE:
 
     def mean(self, timestep, initial_data):
         """
-        timestep \in R^n\\
-        initial_data \in R^(n x 1)
+        timestep \in R\\
+        initial_data \in R^(n)
         """
 
         exp_F = self.drift.solution_matrix(timestep)
@@ -219,27 +219,32 @@ class SDE:
         else:
             return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
 
-    def step(self, timestep, next_timestep, noisy_x, model_output, subkey, method: str = "euler/heun"):
+    def step(self, model_output, timestep, data, key, dt, method: str = "euler/heun"):
         """
         Remove noise from image using the reverse SDE
+        dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
         """
-        t_n, t = next_timestep, timestep
-
-        noise = jax.random.normal(subkey, noisy_x.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same
-
-        h = t_n-t # difference in timestep
-
-        def d(n_x,t, noise):
+        key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
+        # TODO (KLAUS): MAKE TIME AND X SAME SIZE
+        def d(n_x, t, key):
             """
             Evaluate dx/dt at x,t\\
             TODO: Talk to klaus about the correctness of this
             """
-            Fx = self.mean(t,n_x) # F(t)*x(t)
-            # print("Fx =",Fx)
+            noise = jax.random.normal(key, n_x.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same. Answer: Yes, they should
+
+            Fx = self.mean(t, n_x) 
+            # print("Fx =",Fx) # TODO (KLAUS): try print(f"{Fx=}") and observe magic
             L = self.diffusion(t)
             # print("L =",L)
-            dxt = Fx - L@L.T * model_output + L * noise # assuming model_output=score
-            # print("dxt =",dxt)
+
+            if self.diffusion.diagonal_form:
+                diffusion_term = - L * L * model_output + L * noise
+            else:
+                diffusion_term = - L @ L.T @ model_output + L @ noise
+
+            dxdt = Fx + diffusion_term 
+            
             # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
 
             # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
@@ -248,31 +253,33 @@ class SDE:
             # f(x,t) = -drift
             # g(t) = diffusion
             # dw = noise
+            
 
             # sample is x in x+h*f in Euler
             # the h from Euler comes through the diffusion part i think, im not certain
 
-            return dxt
+            return dxdt
 
-        derivative = d(noisy_x, t, noise) # find dx/dt
+        derivative = d(data, timestep, noise_key) # find dx/dt
 
         ### Euler ###
-        h_f = h*derivative
-        x_n1 = noisy_x + h_f
+        dx = dt*derivative
+        euler = data + dx
 
         # if method == "euler" or t == 0: # not nice to use if-statement in jax
         #     return x_n1
+        return euler, key
 
-
+        # TODO (ANDREAS): THE SECOND CALL TO d requires calling the model again. I understand why step correct exists.
         ### Runge kutta ###
-
+        key, noise_key = jax.random.split(key)
         # elif method == "heun":        
         a = 1 # 1 = Heun method, 1/2 = midpoint method, 3/2 = Ralstons method
-        ls = (1-1/(2*a))* h_f # left side
-        rs = h/(2*a) * d(x_n1, t+a*h, noise) # right side
-        x_n2 = noisy_x + ls + rs
+        ls = (1-1/(2*a))* dx # left side
+        rs = dt/(2*a) * d(euler, timestep+a*dt, noise_key) # right side
+        x_n2 = data + ls + rs
 
-        return x_n2
+        return x_n2, key
 
 
         # self.mean(timestep, noisy_data) = F(t)*x(t)
@@ -363,5 +370,5 @@ if __name__ == "__main__":
 
     model_out = jnp.ones((len(timesteps), n))
     h = 0.05 # too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
-    prev_x = sde.step(timestep= timesteps, next_timestep=timesteps+h, noisy_x=x0, model_output = model_out, subkey = key, method = "huen")
+    prev_x = sde.step(timestep= timesteps, next_timestep=timesteps+h, noisy_x=x0, model_output = model_out, key = key, method = "huen")
     # print(prev_x)

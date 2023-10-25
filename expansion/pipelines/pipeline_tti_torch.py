@@ -20,6 +20,8 @@ import torch
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 
+import jax
+
 class UTTIPipeline(DiffusionPipeline):
     r"""
     Pipeline for image generation.
@@ -44,6 +46,8 @@ class UTTIPipeline(DiffusionPipeline):
     def __call__(
         self,
         prompt: Union[str, List[str]],
+        key,
+        device: str = "cuda",
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         num_inference_steps: int = 1000,
         output_type: Optional[str] = "pil",
@@ -120,12 +124,14 @@ class UTTIPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
 
+        dt = -1/num_inference_steps
+
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
             model_output = self.unet(image, t, encoder_hidden_states=prompt_embeddings).sample
 
             # 2. compute previous image: x_t -> x_t-1
-            image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+            image, key = self.scheduler.step(model_output, t, image, key, dt, device)
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
