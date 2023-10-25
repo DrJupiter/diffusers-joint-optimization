@@ -171,6 +171,12 @@ class SDE:
 
 
     def sample(self, timestep, initial_data, key):
+        """
+        Sample a noisy datapoit using\\
+        x(t)=mu(t) + A(t) z_t  |  z_t \~ N(0,1)\\
+        which is the same as:\\
+        x(t) \~ N( mu(t),Sigma(t) )
+        """
         
         key, subkey = jax.random.split(key)
         
@@ -178,16 +184,20 @@ class SDE:
 
         mean = self.mean(timestep, initial_data)
 
-        A = self.diffusion.decomposition(timestep)
+        A = self.diffusion.decomposition(timestep) # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
 
         if self.diffusion.diagonal_form:
             decomposition_product = A.squeeze(1) * z
         else:
             decomposition_product = batch_matrix_vec(A, z) 
 
-        return mean + decomposition_product, z
+        return mean + decomposition_product, z # x(t)=mu(t) + A(t) z_t, z_t
 
     def mean(self, timestep, initial_data):
+        """
+        timestep \in R^n\\
+        initial_data \in R^(n x 1)
+        """
 
         exp_F = self.drift.solution_matrix(timestep)
 
@@ -207,7 +217,62 @@ class SDE:
         else:
             return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
 
-    def step(self, method: str = "euler/heun"):
+    def step(self, timestep, next_timestep, noisy_x, model_output, subkey, method: str = "euler/heun"):
+        """
+        Remove noise from image using the reverse SDE
+        """
+        t_n, t = next_timestep, timestep
+
+        noise = jax.random.normal(subkey, noisy_x.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same
+
+        h = t_n-t # difference in timestep
+
+        def d(n_x,t, noise):
+            """
+            Evaluate dx/dt at x,t\\
+            TODO: Talk to klaus about the correctness of this
+            """
+            Fx = self.mean(t,n_x) # F(t)*x(t)
+            # print("Fx =",Fx)
+            L = self.diffusion(t)
+            # print("L =",L)
+            dxt = Fx - L@L.T * model_output + L * noise # assuming model_output=score
+            # print("dxt =",dxt)
+            # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
+
+            # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
+            # what he does:
+            # prev_sample = sample - drift + diffusion**2 * model_output + diffusion * noise
+            # f(x,t) = -drift
+            # g(t) = diffusion
+            # dw = noise
+
+            # sample is x in x+h*f in Euler
+            # the h from Euler comes through the diffusion part i think, im not certain
+
+            return dxt
+
+        derivative = d(noisy_x, t, noise) # find dx/dt
+
+        ### Euler ###
+        h_f = h*derivative
+        x_n1 = noisy_x + h_f
+
+        # if method == "euler" or t == 0: # not nice to use if-statement in jax
+        #     return x_n1
+
+
+        ### Runge kutta ###
+
+        # elif method == "heun":        
+        a = 1 # 1 = Heun method, 1/2 = midpoint method, 3/2 = Ralstons method
+        ls = (1-1/(2*a))* h_f # left side
+        rs = h/(2*a) * d(x_n1, t+a*h, noise) # right side
+        x_n2 = noisy_x + ls + rs
+
+        return x_n2
+
+
         # self.mean(timestep, noisy_data) = F(t)*x(t)
         # L(t) = drift, through model call, look at pipeline
 
@@ -236,9 +301,9 @@ if __name__ == "__main__":
 
     t = Symbol('t', nonnegative=True, real=True)
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1,1,1.5])
+    timesteps = jnp.array([0.1,1,1.5]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
 
-    n = 1
+    n = 1 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))
 
@@ -290,3 +355,8 @@ if __name__ == "__main__":
 #    sde = SDE(t, Matrix([[1/(t+1)]*435580]), Matrix([[t]*435580]), Matrix([[1]*435580]), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
 #    t1 = timeit.time.time()
 #    print(t1-t0)
+
+    model_out = jnp.ones((len(timesteps), n))
+    h = 0.05 # too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
+    prev_x = sde.step(timestep= timesteps, next_timestep=timesteps+h, noisy_x=x0, model_output = model_out, subkey = key, method = "huen")
+    # print(prev_x)
