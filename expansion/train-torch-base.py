@@ -160,7 +160,6 @@ def main():
                 #z = torch.randn(clean_images.shape).to(clean_images.device)
 
                 batch_size_z = clean_images.shape[0]
-                print(clean_images.dtype)
 
                 # TODO (KLAUS) : CONTINOUOS SDE --> CONTINOUOS TIME
 
