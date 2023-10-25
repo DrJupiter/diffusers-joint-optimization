@@ -7,10 +7,6 @@ import jax.numpy as jnp
 # load DNN library 
 jax.random.PRNGKey(0)
 
-from sympy import Symbol
-import sympy
-import numpy as np
-
 import math
 from tqdm.auto import tqdm
 
@@ -22,21 +18,19 @@ from accelerate.utils import ProjectConfiguration
 
 from config.config import Config
 from config.utils import get_wandb_input, save_local_cloud, get_params_to_save # TODO (KLAUS) : TORCH VERSION
-from data.dataload import get_dataset # TODO (KLAUS) : TORCH VERSION
+from data.dataload import get_dataset 
 
-from transformers import set_seed, CLIPTextModel, CLIPImageProcessor, CLIPTokenizer
+from transformers import set_seed, CLIPTextModel, CLIPTokenizer
 
 from diffusers.utils import check_min_version, make_image_grid
+from diffusers.utils.pil_utils import numpy_to_pil
 
 from pipelines.pipeline_tti_torch import UTTIPipeline
 
 check_min_version("0.22.0.dev0")
-
-from PIL import Image
-
 import wandb
 
-from diffusers import (DDPMScheduler,DDIMScheduler, UNet2DConditionModel, ScoreSdeVeScheduler)
+from diffusers import (DDPMScheduler,DDIMScheduler, UNet2DConditionModel)
 from diffusers.optimization import get_cosine_schedule_with_warmup
 
 from sde_torch import TorchSDE 
@@ -94,33 +88,33 @@ def main():
     text_encoder.requires_grad_(False)
 
     # TODO Make this a class containing the SDE and the UNET
-    unet = UNet2DConditionModel(sample_size=config.training.resolution,
-                                in_channels=3,
-                                out_channels=3,
-                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-                                )
     #unet = UNet2DConditionModel(sample_size=config.training.resolution,
     #                            in_channels=3,
     #                            out_channels=3,
-    #                            block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-    #                            down_block_types=(
-    #                                "DownBlock2D",  # a regular ResNet downsampling block
-    #                                "DownBlock2D",
-    #                                "DownBlock2D",
-    #                                "DownBlock2D",
-    #                                "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-    #                                "DownBlock2D",
-    #                            ),
-    #                            up_block_types=(
-    #                                "UpBlock2D",  # a regular ResNet upsampling block
-    #                                "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-    #                                "UpBlock2D",
-    #                                "UpBlock2D",
-    #                                "UpBlock2D",
-    #                                "UpBlock2D",
-    #                            ),
-    #                            cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+    #                            cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
     #                            )
+    unet = UNet2DConditionModel(sample_size=config.training.resolution,
+                                in_channels=3,
+                                out_channels=3,
+                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+                                down_block_types=(
+                                    "DownBlock2D",  # a regular ResNet downsampling block
+                                    "DownBlock2D",
+                                    "DownBlock2D",
+                                    "DownBlock2D",
+                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+                                    "DownBlock2D",
+                                ),
+                                up_block_types=(
+                                    "UpBlock2D",  # a regular ResNet upsampling block
+                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                ),
+                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                )
     unet.train()    
 
 # Optimizer 
@@ -138,10 +132,10 @@ def main():
 
 # NOISE SCHEDULAR
 
-    noise_scheduler = DDIMScheduler()
+    #noise_scheduler = DDIMScheduler()
 
     # TODO (KLAUS): FINISH TORCH SDE NOISE SCHEDULER
-    #noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix)
+    noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.module, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
 
 # TRAIN
 
@@ -151,7 +145,7 @@ def main():
 
     epochs = tqdm(range(config.training.epochs), desc="Epoch ... ", position=0)
 
-    for epoch in epochs:
+    for _epoch in epochs:
         
         steps_per_epoch = len(train_dataset) // config.training.total_batch_size
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
@@ -163,28 +157,54 @@ def main():
 
                 clean_images = batch["pixel_values"]
 
+
                 z = torch.randn(clean_images.shape).to(clean_images.device)
 
                 batch_size_z = clean_images.shape[0]
 
                 # TODO (KLAUS) : CONTINOUOS SDE --> CONTINOUOS TIME
-                timesteps = torch.randint(
-                    0, # TODO (KLAUS) : SHOULD BE SDE MIN
-                    noise_scheduler.config.num_train_timesteps,
-                    (batch_size_z,),
-                    device=clean_images.device
-                ).long()
 
-                noisy_images = noise_scheduler.add_noise(clean_images, z, timesteps)
+                #timesteps = torch.randint(
+                #    0, # TODO (KLAUS) : SHOULD BE SDE MIN
+                #    noise_scheduler.config.num_train_timesteps,
+                #    (batch_size_z,),
+                #    device=clean_images.device
+                #).long()
+
+                timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.initial_variable_value) + noise_scheduler.initial_variable_value
+
+                #timesteps = torch.randint(
+                #    noise_scheduler.initial_variable_value, # TODO (KLAUS) : SHOULD BE SDE MIN
+                #    noise_scheduler.max_variable_value,
+                #    (batch_size_z,),
+                #    device=clean_images.device
+                #).long()
+                rng, subkey = jax.random.split(rng)
+
+                noisy_images, z = noise_scheduler.sample(timesteps, clean_images, subkey, device=accelerator.device)
+                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
+                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
+
+                image_grid = make_image_grid(log_image, rows=4,cols=4)
+                accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
+
+                
+                #noisy_images = noise_scheduler.add_noise(clean_images, z, timesteps)
 
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
                 model_pred = unet(noisy_images, timesteps, encoder_hidden_states).sample
-                if noise_scheduler.config.prediction_type == "epsilon":
+
+
+                if config.sde.target == "epsilon":
                     target = z
                 else:
-                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-
+                    raise ValueError(f"Unknown prediction type {config.sde.target}")
+#                if noise_scheduler.config.prediction_type == "epsilon":
+#                    target = z
+#                else:
+#                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+#
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
 
                 avg_loss = accelerator.gather(loss.repeat(config.training.batch_size)).mean()

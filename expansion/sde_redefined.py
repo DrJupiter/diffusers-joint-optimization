@@ -158,6 +158,8 @@ class DIFFUSION:
     def __call__(self, time) -> Any:
         return self.diffusion_call(time)        
 
+    def __repr__(self):
+        return str(self.diffusion)
 class SDE:
     
     def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
@@ -244,6 +246,7 @@ if __name__ == "__main__":
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
+
     F = Matrix.diag([sympy.cos(t)]*n)
     L = Matrix.diag([sympy.sin(t)]*n)
     Q = Matrix.eye(n)
@@ -259,7 +262,8 @@ if __name__ == "__main__":
     # Diagonal tests
     sde = SDE(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
     normal_vector = (sde.sample(timesteps, x0, key)[0])
-    #normal_vector = (sde.sample(timesteps, jnp.ones((len(timesteps), 435580)), key)[0])
+    
+    print((sde.sample(timesteps, jnp.ones((len(timesteps), 435580)), key)[0]).shape)
     #assert jnp.array_equal(normal_vector, custom_vector)
 
     sde = SDE(t, F.diagonal(), L, Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=True)
@@ -279,6 +283,7 @@ if __name__ == "__main__":
 
     assert jnp.array_equal(integral_matrix, integral_vector)
     print("Diagonal integral representation tests passed:)")
+    print(normal_matrix.shape, normal_vector.shape, normal_diag_matrix_0.shape)
 
 #    import timeit 
 #    t0 = timeit.time.time() 
