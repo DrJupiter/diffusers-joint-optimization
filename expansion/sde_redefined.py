@@ -156,6 +156,7 @@ class DIFFUSION:
 
     def __call__(self, time) -> Any:
         return self.diffusion_call(time)        
+
 class SDE:
     
     def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., module='jax', drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
@@ -174,7 +175,6 @@ class SDE:
         A = self.diffusion.decomposition(timestep)
 
         if self.diffusion.diagonal_form:
-            print(A.shape)
             decomposition_product = A.squeeze(1) * z
         else:
             decomposition_product = batch_matrix_vec(A, z) 
@@ -200,6 +200,14 @@ class SDE:
             return -self.diffusion.inv_covariance(timestep) * (data-self.mean(timestep, initial_data))
         else:
             return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
+
+    def step(self, method: str = "euler/heun"):
+        # self.mean(timestep, noisy_data) = F(t)*x(t)
+        # L(t) = drift, through model call, look at pipeline
+
+
+        # self.scheduler must have all functions we call on it
+        pass
 
 def sample(timestep, initial_data, key):
     key, subkey = jax.random.split(key)

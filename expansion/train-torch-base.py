@@ -141,7 +141,7 @@ def main():
         train_loss = 0.0
         for batch in train_dataloader:
             
-            # TODO (ACCELERATOR) 
+      
             with accelerator.accumulate(unet):
 
                 clean_images = batch["pixel_values"]
