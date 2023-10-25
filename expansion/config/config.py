@@ -92,7 +92,7 @@ class SDEConfig:
 
     n = 1 # n = 1 -> a scalar matrix
     
-    drift = Matrix.diag([-100*variable**2]*n).diagonal()
+    drift = Matrix.diag([-variable**2]*n).diagonal()
     diffusion = Matrix.diag([sympy.sin(variable/2 * sympy.pi)]*n).diagonal()
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = Matrix.eye(n).diagonal()
