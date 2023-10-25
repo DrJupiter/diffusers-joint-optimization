@@ -246,7 +246,7 @@ class SDE:
 
             dxdt = Fx + diffusion_term 
             print(f"{Fx=}, {L=}, {dxdt=}") 
-            print(self.diffusion.diffusion)
+            print(self.diffusion.diffusion.subs(symbols("t"),1))
             # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
 
             # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
