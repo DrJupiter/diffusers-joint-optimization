@@ -245,7 +245,7 @@ class SDE:
                 diffusion_term = - L @ L.T @ model_output + L @ noise
 
             dxdt = Fx + diffusion_term 
-            
+            print(f"{Fx=}, {L=}, {dxdt=}") 
             # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
 
             # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
