@@ -97,8 +97,8 @@ class SDEConfig:
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = Matrix.eye(n).diagonal()
 
-    initial_variable_value = 0.
-    max_variable_value = 1. # math.inf
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
 
     module = 'jax'
 

@@ -5,7 +5,6 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import jax
 import jax.numpy as jnp
 # load DNN library 
-jax.random.PRNGKey(0)
 
 import math
 from tqdm.auto import tqdm
@@ -45,7 +44,7 @@ def main():
         set_seed(config.training.seed)
 
     # jax rng
-    rng = jax.random.PRNGKey(config.training.seed)
+    key = jax.random.PRNGKey(config.training.seed)
 
 # ACCELERATOR
 
@@ -158,9 +157,10 @@ def main():
                 clean_images = batch["pixel_values"]
 
 
-                z = torch.randn(clean_images.shape).to(clean_images.device)
+                #z = torch.randn(clean_images.shape).to(clean_images.device)
 
                 batch_size_z = clean_images.shape[0]
+                print(clean_images.dtype)
 
                 # TODO (KLAUS) : CONTINOUOS SDE --> CONTINOUOS TIME
 
@@ -179,20 +179,19 @@ def main():
                 #    (batch_size_z,),
                 #    device=clean_images.device
                 #).long()
-                rng, subkey = jax.random.split(rng)
+                key, subkey = jax.random.split(key)
 
                 noisy_images, z = noise_scheduler.sample(timesteps, clean_images, subkey, device=accelerator.device)
-                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
-                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
-
-                image_grid = make_image_grid(log_image, rows=4,cols=4)
-                accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
+#                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
+#                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
+#
+#                image_grid = make_image_grid(log_image, rows=4,cols=4)
+#                accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
 
                 
                 #noisy_images = noise_scheduler.add_noise(clean_images, z, timesteps)
 
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
-
                 model_pred = unet(noisy_images, timesteps, encoder_hidden_states).sample
 
 
@@ -226,13 +225,13 @@ def main():
 
 
         if accelerator.is_main_process: 
-            
+             
             pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
             prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes"]
 
-            images = pipeline(prompt=prompts, generator=torch.manual_seed(config.training.seed)).images
+            images = pipeline(prompts, key, accelerator.device, generator=torch.manual_seed(config.training.seed)).images
             image_grid = make_image_grid(images, rows=3,cols=2)
             accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
         
