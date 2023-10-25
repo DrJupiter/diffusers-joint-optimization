@@ -2,7 +2,9 @@ import jax.numpy as jnp
 import jax
 import torch
 from dataclasses import dataclass
-
+import sympy
+from sympy import Matrix, Symbol 
+import math
 
 @dataclass
 class WandbConfig:
@@ -86,6 +88,29 @@ class OptimizerConfig:
 @dataclass
 class SDEConfig:
     name = "Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+
+    n = 1 # n = 1 -> a scalar matrix
+    
+    drift = Matrix.diag([sympy.cos(variable)]*n).diagonal()
+    diffusion = Matrix.diag([sympy.sin(variable)]*n).diagonal()
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = Matrix.eye(n).diagonal()
+
+    initial_variable_value = 0.
+    max_variable_value = math.inf
+
+    module = 'jax'
+
+    drift_integral_form=True
+    diffusion_integral_form=True
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+    drift_diagonal_form=True
+    diffusion_diagonal_form=True
+    diffusion_matrix_diagonal_form=True
+
+
 
 @dataclass
 class Config:

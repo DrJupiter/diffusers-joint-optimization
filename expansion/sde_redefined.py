@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sympy
 from sympy import Matrix, Symbol, lambdify, matrix_multiply_elementwise
+import math
 
 
 batch_matrix_vec = jax.vmap(lambda M, v: M @ v)
@@ -159,10 +160,15 @@ class DIFFUSION:
 
 class SDE:
     
-    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., module='jax', drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
+    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
     
         self.drift = DRIFT(variable, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
         self.diffusion = DIFFUSION(variable, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
+
+        # USED FOR GENERATING TIME STEPS
+        self.initial_variable_value = initial_variable_value
+        self.max_variable_value = max_variable_value
+
 
     def sample(self, timestep, initial_data, key):
         

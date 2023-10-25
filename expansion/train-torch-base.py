@@ -1,5 +1,14 @@
 import os
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 
+# LOAD JAX FOR SDE LIB IN JAX
+import jax
+import jax.numpy as jnp
+# load DNN library 
+jax.random.PRNGKey(0)
+
+from sympy import Symbol
+import sympy
 import numpy as np
 
 import math
@@ -30,6 +39,8 @@ import wandb
 from diffusers import (DDPMScheduler,DDIMScheduler, UNet2DConditionModel, ScoreSdeVeScheduler)
 from diffusers.optimization import get_cosine_schedule_with_warmup
 
+from sde_torch import TorchSDE 
+
 def main():
 
     config = Config()
@@ -38,6 +49,9 @@ def main():
 # SET SEED
     if config.training.seed is not None:
         set_seed(config.training.seed)
+
+    # jax rng
+    rng = jax.random.PRNGKey(config.training.seed)
 
 # ACCELERATOR
 
@@ -125,6 +139,9 @@ def main():
 # NOISE SCHEDULAR
 
     noise_scheduler = DDIMScheduler()
+
+    # TODO (KLAUS): FINISH TORCH SDE NOISE SCHEDULER
+    #noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix)
 
 # TRAIN
 
