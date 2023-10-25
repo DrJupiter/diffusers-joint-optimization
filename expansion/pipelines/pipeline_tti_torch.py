@@ -132,10 +132,13 @@ class UTTIPipeline(DiffusionPipeline):
 
             # 2. compute previous image: x_t -> x_t-1
             if torch.isnan(model_output).sum() > 0 or torch.isinf(model_output).sum() > 0:
+                print(t)
                 print(image.max(), image.min())
                 print("nan value or inf from model output")
                 print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
                 print(f"nan values in image {torch.isnan(image).sum()}")
+                import sys
+                sys.exit(0)
             image, key = self.scheduler.step(model_output, t, image, key, dt, device)
 
         image = (image / 2 + 0.5).clamp(0, 1)
