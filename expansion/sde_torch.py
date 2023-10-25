@@ -31,7 +31,7 @@ class TorchSDE(SDE):
         jax_model_output = jnp.array(model_output.reshape(batch_size, -1).numpy(force=True))
         jax_data = jnp.array(data.reshape(batch_size, -1).numpy(force=True))
         jax_timestep = timestep.reshape(-1).numpy(force=True)
-        if timestep.shape[0] != batch_size:
+        if len(timestep.shape) in [0,1]:
             jax_timestep = jnp.array(jax_timestep.repeat(batch_size))
         else:
             jax_timestep = jnp.array(jax_timestep)
