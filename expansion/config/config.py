@@ -30,13 +30,14 @@ class TrainingConfig:
 
     target = "epsilon"
 
-    dataset_name = "lambdalabs/pokemon-blip-captions"
+    dataset_name = "mnist" # "lambdalabs/pokemon-blip-captions"
     dataset_config_name = None # The config of the Dataset, leave as None if there's only one config.
 
     train_data_dir = None # A folder containing the training data. Folder contents must follow the structure described in https://huggingface.co/docs/datasets/image_dataset#imagefolder. In particular, a `metadata.jsonl` file
 
     image_column = "image"
-    caption_column = "text"
+    caption_column = "label" # "text"
+    try_convert_label_string = True # False
 
     cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
 

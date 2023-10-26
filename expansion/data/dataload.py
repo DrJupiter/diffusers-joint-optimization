@@ -94,6 +94,8 @@ def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator
             elif isinstance(caption, (list, np.ndarray)):
                 # take a random caption if there are multiple
                 captions.append(random.choice(caption) if is_train else caption[0])
+            elif config.training.try_convert_label_string:
+                captions.append(str(caption))
             else:
                 raise ValueError(
                     f"Caption column `{caption_column}` should contain either strings or lists of strings."
