@@ -150,7 +150,7 @@ def main():
         steps_per_epoch = len(train_dataset) // config.training.total_batch_size
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         train_loss = 0.0
-        for _step, batch in zip(train_step_progress_bar,train_dataloader):
+        for batch in train_dataloader:
             
       
             with accelerator.accumulate(unet):
