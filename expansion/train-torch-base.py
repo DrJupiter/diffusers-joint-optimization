@@ -171,7 +171,7 @@ def main():
                 #    device=clean_images.device
                 #).long()
 
-                timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.min_sample_value) + noise_scheduler.min_sample_values
+                timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.min_sample_value) + noise_scheduler.min_sample_value
 
                 #timesteps = torch.randint(
                 #    noise_scheduler.initial_variable_value, # TODO (KLAUS) : SHOULD BE SDE MIN
