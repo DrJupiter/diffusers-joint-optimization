@@ -121,8 +121,10 @@ class DIFFUSION:
             elif diagonal and not diagonal_diffusion:
                 
                 self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
-                
-        self.solution_matrix = (self.diffusion_int-self.diffusion_int.limit(variable, initial_value))
+
+        # TODO (KLAUS) : SEE IF POSSIBLE TO REIMPLEMENT LIMIT, CAUSES PROBLEMS WITH MAX AND MIN FUNCTIONS ON SERIES                
+        #self.solution_matrix = (self.diffusion_int-self.diffusion_int.limit(variable, initial_value, '+'))
+        self.solution_matrix = (self.diffusion_int-self.diffusion_int.subs(variable, initial_value))
         
         if not self.diagonal_form:
             
@@ -135,7 +137,7 @@ class DIFFUSION:
             self.decomposition = self.solution_matrix.applyfunc(sympy.sqrt)
             self.inv_decomposition = self.decomposition.applyfunc(lambda x: 1/x)
             self.inv_covariance = self.solution_matrix.applyfunc(lambda x: 1/x)
-        
+        print(self.inv_decomposition) 
         self.diffusion_call = lambdify(variable, self.diffusion, module)
 
         self.decomposition = lambdify(variable, self.decomposition, module)

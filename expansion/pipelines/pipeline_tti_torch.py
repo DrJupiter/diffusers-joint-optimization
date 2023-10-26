@@ -124,7 +124,7 @@ class UTTIPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps, device)
 
-        dt = -(self.scheduler.max_variable_value-self.scheduler.initial_variable_value)/(num_inference_steps-1)
+        dt = -(self.scheduler.max_variable_value-self.scheduler.min_sample_value)/(num_inference_steps-1)
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output

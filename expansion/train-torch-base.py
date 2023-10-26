@@ -5,6 +5,7 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import jax
 import jax.numpy as jnp
 # load DNN library 
+#jax.random.PRNGKey(0)
 
 import math
 from tqdm.auto import tqdm
@@ -134,7 +135,7 @@ def main():
     #noise_scheduler = DDIMScheduler()
 
     # TODO (KLAUS): FINISH TORCH SDE NOISE SCHEDULER
-    noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.module, config.sde.target, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
+    noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.min_sample_value, config.sde.module, config.sde.target, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
 
 # TRAIN
 
@@ -170,7 +171,7 @@ def main():
                 #    device=clean_images.device
                 #).long()
 
-                timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.initial_variable_value) + noise_scheduler.initial_variable_value
+                timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.min_sample_value) + noise_scheduler.min_sample_values
 
                 #timesteps = torch.randint(
                 #    noise_scheduler.initial_variable_value, # TODO (KLAUS) : SHOULD BE SDE MIN

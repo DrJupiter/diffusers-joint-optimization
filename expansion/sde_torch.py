@@ -6,8 +6,9 @@ import jax.numpy as jnp
 
 class TorchSDE(SDE):
 
-    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value=0, max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form=False, diffusion_integral_form=False, diffusion_integral_decomposition='cholesky', drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True):
+    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value=0, max_variable_value = math.inf, min_sample_value=1e-4, module='jax', model_target="epsilon", drift_integral_form=False, diffusion_integral_form=False, diffusion_integral_decomposition='cholesky', drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True):
         super().__init__(variable, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, model_target, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_diagonal_form, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
+        self.min_sample_value = min_sample_value
     
     def sample(self, timestep, initial_data, key, device='cuda'):
 
@@ -21,7 +22,7 @@ class TorchSDE(SDE):
         return torch.from_numpy(np.array(noisy_data.reshape(original_shape))).to(device), torch.from_numpy(np.array(noise.reshape(original_shape))).to(device) 
     
     def set_timesteps(self,num_inference_steps, device):
-        self.timesteps = torch.from_numpy(np.linspace(self.initial_variable_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device)
+        self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device)
 
     def step(self, model_output, timestep, data, key, dt, device='cuda', method: str = "euler/heun"):
 
