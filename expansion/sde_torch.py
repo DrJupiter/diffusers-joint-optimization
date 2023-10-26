@@ -6,8 +6,8 @@ import jax.numpy as jnp
 
 class TorchSDE(SDE):
 
-    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value=0, max_variable_value = math.inf, module='jax', drift_integral_form=False, diffusion_integral_form=False, diffusion_integral_decomposition='cholesky', drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True):
-        super().__init__(variable, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_diagonal_form, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
+    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value=0, max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form=False, diffusion_integral_form=False, diffusion_integral_decomposition='cholesky', drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True):
+        super().__init__(variable, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, model_target, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_diagonal_form, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
     
     def sample(self, timestep, initial_data, key, device='cuda'):
 
