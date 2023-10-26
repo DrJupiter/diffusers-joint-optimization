@@ -162,7 +162,7 @@ class DIFFUSION:
         return str(self.diffusion)
 class SDE:
     
-    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
+    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
     
         self.drift = DRIFT(variable, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
         self.diffusion = DIFFUSION(variable, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
@@ -170,6 +170,7 @@ class SDE:
         # USED FOR GENERATING TIME STEPS
         self.initial_variable_value = initial_variable_value
         self.max_variable_value = max_variable_value
+        self.model_target = model_target
 
 
     def sample(self, timestep, initial_data, key):
@@ -226,6 +227,16 @@ class SDE:
         """
         key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
         # TODO (KLAUS): MAKE TIME AND X SAME SIZE
+        if self.model_target == "epsilon":
+            if self.diffusion.diagonal_form:
+                score = - self.diffusion.inv_decomposition(t).squeeze(1) * model_output
+            else:
+                score = -self.diffusion.inv_decomposition(t) @ model_output
+        elif self.model_target == "score":
+            score = model_output
+        else:
+            raise ValueError(f"Unable to calculate score based on Model Target {self.model_target}")
+        
         def d(n_x, t, key):
             """
             Evaluate dx/dt at x,t\\
@@ -235,14 +246,14 @@ class SDE:
 
             Fx = self.mean(t, n_x) 
             # print("Fx =",Fx) # TODO (KLAUS): try print(f"{Fx=}") and observe magic
-            L = self.diffusion(t-0.001)
+            L = self.diffusion(t)
             # print("L =",L)
 
             if self.diffusion.diagonal_form:
                 L = L.squeeze(1)
-                diffusion_term = - L * L * model_output + L * noise
+                diffusion_term = - L * L * score + L * noise
             else:
-                diffusion_term = - L @ L.T @ model_output + L @ noise
+                diffusion_term = - L @ L.T @ score + L @ noise
 
             dxdt = Fx + diffusion_term 
             # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
