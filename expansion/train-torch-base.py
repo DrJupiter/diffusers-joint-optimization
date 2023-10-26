@@ -87,33 +87,33 @@ def main():
     text_encoder.requires_grad_(False)
 
     # TODO Make this a class containing the SDE and the UNET
-    #unet = UNet2DConditionModel(sample_size=config.training.resolution,
-    #                            in_channels=3,
-    #                            out_channels=3,
-    #                            cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-    #                            )
     unet = UNet2DConditionModel(sample_size=config.training.resolution,
                                 in_channels=3,
                                 out_channels=3,
-                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-                                down_block_types=(
-                                    "DownBlock2D",  # a regular ResNet downsampling block
-                                    "DownBlock2D",
-                                    "DownBlock2D",
-                                    "DownBlock2D",
-                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-                                    "DownBlock2D",
-                                ),
-                                up_block_types=(
-                                    "UpBlock2D",  # a regular ResNet upsampling block
-                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                ),
-                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
                                 )
+#    unet = UNet2DConditionModel(sample_size=config.training.resolution,
+#                                in_channels=3,
+#                                out_channels=3,
+#                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+#                                down_block_types=(
+#                                    "DownBlock2D",  # a regular ResNet downsampling block
+#                                    "DownBlock2D",
+#                                    "DownBlock2D",
+#                                    "DownBlock2D",
+#                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+#                                    "DownBlock2D",
+#                                ),
+#                                up_block_types=(
+#                                    "UpBlock2D",  # a regular ResNet upsampling block
+#                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                ),
+#                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+#                                )
     unet.train()    
 
 # Optimizer 
