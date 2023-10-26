@@ -50,7 +50,7 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 16
+    batch_size = 24
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
