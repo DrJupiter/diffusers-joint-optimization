@@ -229,9 +229,9 @@ class SDE:
         # TODO (KLAUS): MAKE TIME AND X SAME SIZE
         if self.model_target == "epsilon":
             if self.diffusion.diagonal_form:
-                score = - self.diffusion.inv_decomposition(t).squeeze(1) * model_output
+                score = - self.diffusion.inv_decomposition(timestep).squeeze(1) * model_output
             else:
-                score = -self.diffusion.inv_decomposition(t) @ model_output
+                score = -self.diffusion.inv_decomposition(timestep) @ model_output
         elif self.model_target == "score":
             score = model_output
         else:
