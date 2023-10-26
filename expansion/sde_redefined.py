@@ -245,7 +245,7 @@ class SDE:
                 diffusion_term = - L @ L.T @ model_output + L @ noise
 
             dxdt = Fx + diffusion_term 
-            print(f"{Fx=}, {L=}, {dxdt=}") 
+            print(f"{Fx=}, {L=}, {dxdt=}, {t=}") 
             print(self.diffusion.diffusion.subs(Symbol('t', nonnegative=True, real=True),1))
             # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
 
