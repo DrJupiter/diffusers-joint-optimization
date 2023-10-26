@@ -235,7 +235,7 @@ class SDE:
 
             Fx = self.mean(t, n_x) 
             # print("Fx =",Fx) # TODO (KLAUS): try print(f"{Fx=}") and observe magic
-            L = self.diffusion(t)
+            L = self.diffusion(t-0.001)
             # print("L =",L)
 
             if self.diffusion.diagonal_form:
