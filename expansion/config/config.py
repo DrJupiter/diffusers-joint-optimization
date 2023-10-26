@@ -98,7 +98,7 @@ class SDEConfig:
     diffusion_matrix = Matrix.eye(n).diagonal()
 
     initial_variable_value = 0
-    max_variable_value = 1 # math.inf
+    max_variable_value = 0.99 # math.inf
 
     module = 'jax'
 
