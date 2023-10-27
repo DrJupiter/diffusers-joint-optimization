@@ -152,7 +152,7 @@ class UTTIPipeline(DiffusionPipeline):
             """
             timestep = torch.tensor([self.scheduler.max_variable_value]*batch_size).to(device)
             key, subkey = jax.random.split(key)
-            image = self.scheduler.sample(timestep, image, subkey, device)
+            image, _ = self.scheduler.sample(timestep, image, subkey, device)
             image, key = denoise(image, prompt_embeddings, key)
             
 
