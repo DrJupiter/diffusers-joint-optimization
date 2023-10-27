@@ -225,7 +225,6 @@ def main():
 
 
         if accelerator.is_main_process: 
-            print("hi")
              
             pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
@@ -233,7 +232,7 @@ def main():
             #prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes"]
             prompts = ["0", "1", "2", "3", "4", "5"]
 
-            images = pipeline(prompts, key, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000).images
+            images = pipeline(prompts, key, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, gen_twice=bool(_epoch % 2)).images
             image_grid = make_image_grid(images, rows=3,cols=2)
             accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
         

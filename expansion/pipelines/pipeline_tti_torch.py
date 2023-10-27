@@ -52,6 +52,7 @@ class UTTIPipeline(DiffusionPipeline):
         num_inference_steps: int = 1000,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
+        gen_twice: bool = False,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         The call function to the pipeline for generation.
@@ -126,23 +127,36 @@ class UTTIPipeline(DiffusionPipeline):
 
         dt = -(self.scheduler.max_variable_value-self.scheduler.min_sample_value)/(num_inference_steps-1)
 
-        for t in self.progress_bar(self.scheduler.timesteps):
-            # 1. predict noise model_output
-            model_output = self.unet(image, t, encoder_hidden_states=prompt_embeddings).sample
+        def denoise(image, prompt_embeddings, key):
+            for t in self.progress_bar(self.scheduler.timesteps):
+                # 1. predict noise model_output
+                model_output = self.unet(image, t, encoder_hidden_states=prompt_embeddings).sample
 
-            # 2. compute previous image: x_t -> x_t-1
-            if torch.isnan(model_output).sum() > 0 or torch.isinf(model_output).sum() > 0:
-                print(t)
-                print(image.max(), image.min())
-                print("nan value or inf from model output")
-                print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
-                print(f"nan values in image {torch.isnan(image).sum()}")
-            image, key = self.scheduler.step(model_output, t, image, key, dt, device)
+                # 2. compute previous image: x_t -> x_t-1
+                if torch.isnan(model_output).sum() > 0 or torch.isinf(model_output).sum() > 0:
+                    print(t)
+                    print(image.max(), image.min())
+                    print("nan value or inf from model output")
+                    print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
+                    print(f"nan values in image {torch.isnan(image).sum()}")
+                image, key = self.scheduler.step(model_output, t, image, key, dt, device)
 
-            if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
-                print(t)
-                print("nan values in image")
-        
+                if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
+                    print(t)
+                    print("nan values in image")
+            return image, key
+        image, key = denoise(image, prompt_embeddings, key)
+        if gen_twice:
+            """
+            Generate a noisy image based on the final generation and then denoise
+            """
+            timestep = torch.tensor([self.scheduler.max_variable_value]*batch_size).to(device)
+            key, subkey = jax.random.split(key)
+            image = self.scheduler.sample(timestep, image, subkey, device)
+            image, key = denoise(image, prompt_embeddings, key)
+            
+
+
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
