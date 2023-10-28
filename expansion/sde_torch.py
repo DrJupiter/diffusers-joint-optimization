@@ -4,6 +4,7 @@ import numpy as np
 import math
 import jax.numpy as jnp
 
+# TODO (Klaus) : Add mxin and config so we can save properly
 class TorchSDE(SDE):
 
     def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value=0, max_variable_value = math.inf, min_sample_value=1e-4, module='jax', model_target="epsilon", drift_integral_form=False, diffusion_integral_form=False, diffusion_integral_decomposition='cholesky', drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True):
