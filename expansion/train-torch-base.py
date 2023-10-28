@@ -236,7 +236,7 @@ def main():
             image_grid = make_image_grid(images, rows=3,cols=4)
             accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
 
-            if _epoch % 1000:
+            if (_epoch % 1000) == 0:
                 save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
 
     if accelerator.is_main_process: 
