@@ -35,9 +35,16 @@ def get_full_repo_name(model_id: str, organization: str = None, token: str = Non
     else:
         return f"{organization}/{model_id}"
 
-def save_local_cloud(config: Config, params, pipeline):
+def save_local_cloud(config: Config, params, pipeline, interface="jax", accelerator=None):
     # Handle the repository creation
-    if jax.process_index() == 0:
+
+    if interface == "jax":
+
+        check = jax.process_index() == 0
+    elif interface == "torch":
+        check = accelerator.is_main_process
+
+    if check:
         
         os.makedirs(config.training.save_dir, exist_ok=True)
 
@@ -48,11 +55,15 @@ def save_local_cloud(config: Config, params, pipeline):
 
          
         #pipeline = TODO (KLAUS): CHANGE THIS TO OUR PIPELINE 
-
-        pipeline.save_pretrained(
-            config.training.save_dir,
-            params=params
-        )
+        if interface == "jax":
+            pipeline.save_pretrained(
+                config.training.save_dir,
+                params=params
+            )
+        elif interface == "torch":
+            pipeline.save_pretrained(
+                config.training.save_dir
+            )
 
         if config.training.push_to_hub:
             upload_folder(

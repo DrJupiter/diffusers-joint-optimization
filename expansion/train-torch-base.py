@@ -137,6 +137,10 @@ def main():
     # TODO (KLAUS): FINISH TORCH SDE NOISE SCHEDULER
     noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.min_sample_value, config.sde.module, config.sde.target, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
 
+    pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
+    save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
+    import sys
+    sys.exit(0)
 # TRAIN
 
     global_step = 0
@@ -235,6 +239,8 @@ def main():
             images = pipeline(prompts, key, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, gen_twice=bool(_epoch % 2)).images
             image_grid = make_image_grid(images, rows=3,cols=2)
             accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
+
+    accelerator.end_training()
         
 if __name__ == "__main__":
     main()

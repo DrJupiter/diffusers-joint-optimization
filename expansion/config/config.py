@@ -50,7 +50,7 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 30
+    batch_size = 50
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
@@ -65,7 +65,7 @@ class TrainingConfig:
 @dataclass
 class OptimizerConfig:
 
-    learning_rate = 2e-5 # Initial learning rate (after the potential warmup period) to use.
+    learning_rate = 5e-6 # Initial learning rate (after the potential warmup period) to use.
 
     scale_lr = False # Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.
 
@@ -100,7 +100,7 @@ class SDEConfig:
 
     initial_variable_value = 0
     max_variable_value = 1 # math.inf
-    min_sample_value = 1e-5
+    min_sample_value = 1e-6
 
     module = 'jax'
 

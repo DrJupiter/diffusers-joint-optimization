@@ -174,7 +174,6 @@ class SDE:
         self.max_variable_value = max_variable_value
         self.model_target = model_target
 
-
     def sample(self, timestep, initial_data, key):
         """
         Sample a noisy datapoit using\\
