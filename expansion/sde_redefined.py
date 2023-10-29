@@ -221,86 +221,108 @@ class SDE:
         else:
             return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
 
-    def step(self, model_output, timestep, data, key, dt, method: str = "euler/heun"):
+    def d(self, noisy_data, model_output, timestep, key):
+        """
+        Evaluate dx/dt at noisy_data,t\\
+        TODO: Talk to klaus about the correctness of this (should be resolved)\\
+        TODO: better name?
+        """
+
+        # generate random noise
+        noise = jax.random.normal(key, noisy_data.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same. Answer: Yes, they should
+
+        # Find mean of noisy data at timestep t
+        Fx = self.mean(timestep, noisy_data) 
+
+        # Find diffusion at timestep t
+        L = self.diffusion(timestep)
+
+        # Finds core at timestep t based on the intial data and the noisy data
+        if self.model_target == "epsilon":
+            if self.diffusion.diagonal_form:
+                score = - self.diffusion.inv_decomposition(timestep).squeeze(1) * model_output
+            else:
+                score = -self.diffusion.inv_decomposition(timestep) @ model_output
+
+        elif self.model_target == "score":
+            score = model_output
+
+        else:
+            raise ValueError(f"Unable to calculate score based on Model Target {self.model_target}")
+
+        # use correct form baed on if its a digagonal form or a filled matrix
+        if self.diffusion.diagonal_form: # diagonal
+            L = L.squeeze(1)
+            diffusion_term = - L * L * score + L * noise
+        else: # filled
+            diffusion_term = - L @ L.T @ score + L @ noise
+
+        # F(t) x(t) +  ( L(t) L(t) score + L(t)*noise )
+        dxdt = Fx + diffusion_term 
+
+        #print(f"{L=}, {score=},{self.diffusion.inv_decomposition(t)=}")
+        # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
+
+        # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
+        # what he does:
+        # prev_sample = sample - drift + diffusion**2 * model_output + diffusion * noise
+        # f(x,t) = -drift
+        # g(t) = diffusion
+        # dw = noise
+        
+        # sample is x in x+h*f in Euler
+        # the h from Euler comes through the diffusion part i think, im not certain
+
+        return dxdt
+
+    def step(self, model_output, timestep, noisy_data, key, dt):
         """
         Remove noise from image using the reverse SDE
         dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
         """
         key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
         # TODO (KLAUS): MAKE TIME AND X SAME SIZE
-        if self.model_target == "epsilon":
-            if self.diffusion.diagonal_form:
-                score = - self.diffusion.inv_decomposition(timestep).squeeze(1) * model_output
-            else:
-                score = -self.diffusion.inv_decomposition(timestep) @ model_output
-        elif self.model_target == "score":
-            score = model_output
-        else:
-            raise ValueError(f"Unable to calculate score based on Model Target {self.model_target}")
-        
-        def d(n_x, t, key):
-            """
-            Evaluate dx/dt at x,t\\
-            TODO: Talk to klaus about the correctness of this
-            """
-            noise = jax.random.normal(key, n_x.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same. Answer: Yes, they should
 
-            Fx = self.mean(t, n_x) 
-            # print("Fx =",Fx) # TODO (KLAUS): try print(f"{Fx=}") and observe magic
-            L = self.diffusion(t)
-            # print("L =",L)
-
-            if self.diffusion.diagonal_form:
-                L = L.squeeze(1)
-                diffusion_term = - L * L * score + L * noise
-            else:
-                diffusion_term = - L @ L.T @ score + L @ noise
-
-            dxdt = Fx + diffusion_term 
-            #print(f"{L=}, {score=},{self.diffusion.inv_decomposition(t)=}")
-            # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
-
-            # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
-            # what he does:
-            # prev_sample = sample - drift + diffusion**2 * model_output + diffusion * noise
-            # f(x,t) = -drift
-            # g(t) = diffusion
-            # dw = noise
-            
-
-            # sample is x in x+h*f in Euler
-            # the h from Euler comes through the diffusion part i think, im not certain
-
-            return dxdt
-
-        derivative = d(data, timestep, noise_key) # find dx/dt
+        # evaluate reverse SDE in the current datapoint and timestep
+        dxdt = self.d(noisy_data, model_output, timestep, key)
 
         ### Euler ###
-        dx = dt*derivative
-        euler = data + dx
+        dx = dt*dxdt # h*f(t,x)
+        euler_data = noisy_data + dx # x + h*f(t,x)
 
-        # if method == "euler" or t == 0: # not nice to use if-statement in jax
-        #     return x_n1
-        return euler, key
+        return euler_data, dxdt, key
 
-        # TODO (ANDREAS): THE SECOND CALL TO d requires calling the model again. I understand why step correct exists.
+    def step_correct(self, model_output_euler_data, timestep, noisy_data, euler_data, dxdt, key, dt):
+        """
+        Perform Runge kutta correction update step.\\
+        Should follow self.step() function using a seconday new model output based on the data returned in self.step().
+        """
+
         ### Runge kutta ###
         key, noise_key = jax.random.split(key)
-        # elif method == "heun":        
+
+        # determine exact 2nd order method      
         a = 1 # 1 = Heun method, 1/2 = midpoint method, 3/2 = Ralstons method
-        ls = (1-1/(2*a))* dx # left side
-        rs = dt/(2*a) * d(euler, timestep+a*dt, noise_key) # right side
-        x_n2 = data + ls + rs
 
-        return x_n2, key
+        ## calculate    x + dt *(1-1/(2*a)) * dxdt   +   dt * 1/(2*a) * d(t+dt*a, new_data)
+
+        # ls = dt *(1-1/(2*a)) * dxdt
+        ls = dt * (1-1/(2*a))* dxdt # left side  --  dxdt = f(t,x), identical to what was used in the self.step() function
+
+        # rs = dt * 1/(2*a) * d(t+dt*a, new_data)
+        rs = dt/(2*a) * self.d(euler_data, model_output_euler_data, timestep+a*dt, noise_key) # right side
+
+        # x + ls + rs
+        corrected_step_data = noisy_data + ls + rs
+
+        return corrected_step_data, key
 
 
-        # self.mean(timestep, noisy_data) = F(t)*x(t)
-        # L(t) = drift, through model call, look at pipeline
 
 
-        # self.scheduler must have all functions we call on it
-        pass
+
+
+
 
 def sample(timestep, initial_data, key):
     key, subkey = jax.random.split(key)
@@ -383,5 +405,10 @@ if __name__ == "__main__":
 
     model_out = jnp.ones((len(timesteps), n))
     h = 0.05 # too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
-    prev_x = sde.step(timestep= timesteps, next_timestep=timesteps+h, noisy_x=x0, model_output = model_out, key = key, method = "huen")
-    # print(prev_x)
+    prev_x, dxdt, key = sde.step(model_output = model_out, timestep = timesteps, noisy_data = x0, key=key, dt=h)
+    print(f"Step test shape = {prev_x.shape}")
+
+    model_out2 = jnp.ones((len(timesteps), n))*2
+    new_x, key = sde.step_correct(model_out2, timesteps, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
+    print(f"Step correct test shape = {new_x.shape}")
+    print("Step and Step correct tests run :)")
