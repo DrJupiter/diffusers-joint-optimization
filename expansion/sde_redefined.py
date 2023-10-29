@@ -404,7 +404,7 @@ if __name__ == "__main__":
 #    print(t1-t0)
 
     model_out = jnp.ones((len(timesteps), n))
-    h = 0.05 # too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
+    h = 0.05 # aka dt -- too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
     prev_x, dxdt, key = sde.step(model_output = model_out, timestep = timesteps, noisy_data = x0, key=key, dt=h)
     print(f"Step test shape = {prev_x.shape}")
 
