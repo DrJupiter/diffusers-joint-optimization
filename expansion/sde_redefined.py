@@ -221,7 +221,7 @@ class SDE:
         else:
             return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
 
-    def d(self, noisy_data, model_output, timestep, key):
+    def reverse_time_derivative(self, noisy_data, model_output, timestep, key):
         """
         Evaluate dx/dt at noisy_data,t\\
         TODO: Talk to klaus about the correctness of this (should be resolved)\\
@@ -281,10 +281,10 @@ class SDE:
         dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
         """
         key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
-        # TODO (KLAUS): MAKE TIME AND X SAME SIZE
+        
 
         # evaluate reverse SDE in the current datapoint and timestep
-        dxdt = self.d(noisy_data, model_output, timestep, key)
+        dxdt = self.reverse_time_derivative(noisy_data, model_output, timestep, noise_key)
 
         ### Euler ###
         dx = dt*dxdt # h*f(t,x)
@@ -310,7 +310,7 @@ class SDE:
         ls = dt * (1-1/(2*a))* dxdt # left side  --  dxdt = f(t,x), identical to what was used in the self.step() function
 
         # rs = dt * 1/(2*a) * d(t+dt*a, new_data)
-        rs = dt/(2*a) * self.d(euler_data, model_output_euler_data, timestep+a*dt, noise_key) # right side
+        rs = dt/(2*a) * self.reverse_time_derivative(euler_data, model_output_euler_data, timestep+a*dt, noise_key) # right side
 
         # x + ls + rs
         corrected_step_data = noisy_data + ls + rs

@@ -38,5 +38,5 @@ class TorchSDE(SDE):
         else:
             jax_timestep = jnp.array(jax_timestep)
 
-        next_sample, key = super().step(jax_model_output, jax_timestep, jax_data, key, dt, method)
-        return torch.from_numpy(np.array(next_sample.reshape(original_shape))).to(device), key
+        next_sample, sample_derivative, key = super().step(jax_model_output, jax_timestep, jax_data, key, dt, method)
+        return torch.from_numpy(np.array(next_sample.reshape(original_shape))).to(device), torch.from_numpy(np.array(sample_derivative.reshape(original_shape))).to(device), key
