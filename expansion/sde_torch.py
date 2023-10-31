@@ -25,7 +25,7 @@ class TorchSDE(SDE):
     def set_timesteps(self,num_inference_steps, device):
         self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device)
 
-    def step(self, model_output, timestep, data, key, dt, device='cuda', method: str = "euler/heun"):
+    def step(self, model_output, timestep, data, key, dt, device='cuda'):
 
         batch_size = data.shape[0]
         original_shape = data.shape
@@ -38,5 +38,5 @@ class TorchSDE(SDE):
         else:
             jax_timestep = jnp.array(jax_timestep)
 
-        next_sample, sample_derivative, key = super().step(jax_model_output, jax_timestep, jax_data, key, dt, method)
+        next_sample, sample_derivative, key = super().step(jax_model_output, jax_timestep, jax_data, key, dt)
         return torch.from_numpy(np.array(next_sample.reshape(original_shape))).to(device), torch.from_numpy(np.array(sample_derivative.reshape(original_shape))).to(device), key
