@@ -53,6 +53,7 @@ class UTTIPipeline(DiffusionPipeline):
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         gen_twice: bool = False,
+        gen_method: str = "euler",
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         The call function to the pipeline for generation.
@@ -141,7 +142,7 @@ class UTTIPipeline(DiffusionPipeline):
                     print(f"nan values in image {torch.isnan(image).sum()}")
                 image, image_derivative, key = self.scheduler.step(model_output, t, image, key, dt, device)
                 # TODO (KLAUS): methods
-
+                
 
                 if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
                     print(t)
