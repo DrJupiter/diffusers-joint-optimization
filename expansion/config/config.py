@@ -57,7 +57,7 @@ class TrainingConfig:
     max_steps = None
     epochs = 1000 
 
-    save_dir = "pokemon-text-to-image"
+    save_dir = "pokemon-test-tti"
     push_to_hub = True
     pretrained_model_or_path ="CompVis/stable-diffusion-v1-4" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
