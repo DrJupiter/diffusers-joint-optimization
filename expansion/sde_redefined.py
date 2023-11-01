@@ -50,7 +50,7 @@ class DRIFT:
         if self.diagonal_form:
             return self.drift_call(time) * data
         else:
-            return self.drift_call @ data
+            return self.drift_call(time) @ data
 
 class DIFFUSION:
     
