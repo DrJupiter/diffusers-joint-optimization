@@ -15,7 +15,7 @@ batch_matrix_vec = jax.vmap(lambda M, v: M @ v)
 
 class DRIFT:
     
-    def __init__(self, variable, drift, initial_value=0., module = 'jax', integral_form=False, diagonal=True):
+    def __init__(self, variable, parameters, drift, initial_value=0., module = 'jax', integral_form=False, diagonal=True):
         
         self.diagonal_form = diagonal
 
@@ -31,30 +31,30 @@ class DRIFT:
             assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
             # This check is not neccesary for diagonal matrices, as they will always commute.
         
-            self.solution_matrix = lambdify(variable, (self.drift_int-self.drift_int.limit(variable, initial_value)).exp(), module)
+            self.solution_matrix = lambdify([variable, parameters], (self.drift_int-self.drift_int.limit(variable, initial_value)).exp(), module)
         else:
             # We can split up the exponential
             #self.solution_matrix = lambdify(variable, matrix_multiply_elementwise(self.drift_int.applyfunc(sympy.exp).transpose(),(-self.drift_int).applyfunc(sympy.exp).limit(variable,initial_value).transpose()), module)
-            self.solution_matrix = lambdify(variable, (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp), module)
+            self.solution_matrix = lambdify([variable,parameters], (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp), module)
 
-        self.drift_call = lambdify(variable, self.drift, module)
+        self.drift_call = lambdify([variable,parameters], self.drift, module)
 
         if module == 'jax':
-            self.drift_call = jax.vmap(self.drift_call)
-            self.solution_matrix = jax.vmap(self.solution_matrix)
+            self.drift_call = jax.vmap(self.drift_call, (0, None))
+            self.solution_matrix = jax.vmap(self.solution_matrix, (0, None))
         
     def __repr__(self):
         return str(self.drift)
 
-    def __call__(self, time, data) -> Any:
+    def __call__(self, time, parameters, data) -> Any:
         if self.diagonal_form:
-            return self.drift_call(time) * data
+            return self.drift_call(time, parameters) * data
         else:
-            return self.drift_call(time) @ data
+            return self.drift_call(time, parameters) @ data
 
 class DIFFUSION:
     
-    def __init__(self, variable, diffusion, diffusion_matrix=None, initial_value=0., module='jax', integral_form=False, integral_decomposition='cholesky', diagonal=True, diagonal_diffusion=True):
+    def __init__(self, variable, parameters, diffusion, diffusion_matrix=None, initial_value=0., module='jax', integral_form=False, integral_decomposition='cholesky', diagonal=True, diagonal_diffusion=True):
     
         self.diagonal_form = diagonal and diagonal_diffusion
 
@@ -137,44 +137,45 @@ class DIFFUSION:
             self.decomposition = self.solution_matrix.applyfunc(sympy.sqrt)
             self.inv_decomposition = self.decomposition.applyfunc(lambda x: 1/x)
             self.inv_covariance = self.solution_matrix.applyfunc(lambda x: 1/x)
-        print(self.inv_decomposition) 
-        self.diffusion_call = lambdify(variable, self.diffusion, module)
+        
+        self.diffusion_call = lambdify([variable, parameters], self.diffusion, module)
 
-        self.decomposition = lambdify(variable, self.decomposition, module)
+        self.decomposition = lambdify([variable, parameters], self.decomposition, module)
 
-        self.inv_decomposition = lambdify(variable, self.inv_decomposition, module)
+        self.inv_decomposition = lambdify([variable, parameters], self.inv_decomposition, module)
 
         # If Sigma(0) != 0, this method has to be constructed in the SDE
-        self.inv_covariance = lambdify(variable, self.inv_covariance, module)
+        self.inv_covariance = lambdify([variable, parameters], self.inv_covariance, module)
 
         if module == 'jax':
             
-            self.diffusion_call = jax.vmap(self.diffusion_call)
+            self.diffusion_call = jax.vmap(self.diffusion_call, (0, None))
 
-            self.decomposition = jax.vmap(self.decomposition)
+            self.decomposition = jax.vmap(self.decomposition, (0, None))
 
-            self.inv_decomposition = jax.vmap(self.inv_decomposition)
+            self.inv_decomposition = jax.vmap(self.inv_decomposition, (0, None))
 
-            self.inv_covariance = jax.vmap(self.inv_covariance)
+            self.inv_covariance = jax.vmap(self.inv_covariance, (0, None))
 
-    def __call__(self, time) -> Any:
-        return self.diffusion_call(time)        
+    def __call__(self, time, parameters) -> Any:
+        return self.diffusion_call(time, parameters)        
 
     def __repr__(self):
         return str(self.diffusion)
+
 class SDE:
     
-    def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
+    def __init__(self, variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
     
-        self.drift = DRIFT(variable, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
-        self.diffusion = DIFFUSION(variable, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
+        self.drift = DRIFT(variable, drift_parameters, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
+        self.diffusion = DIFFUSION(variable, diffusion_parameters, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
 
         # USED FOR GENERATING TIME STEPS
         self.initial_variable_value = initial_variable_value
         self.max_variable_value = max_variable_value
         self.model_target = model_target
 
-    def sample(self, timestep, initial_data, key):
+    def sample(self, timestep, drift_parameters, diffusion_parameters, initial_data, key):
         """
         Sample a noisy datapoit using\\
         x(t)=mu(t) + A(t) z_t  |  z_t \~ N(0,1)\\
@@ -186,9 +187,9 @@ class SDE:
         
         z = jax.random.normal(subkey, initial_data.shape)
 
-        mean = self.mean(timestep, initial_data)
+        mean = self.mean(timestep, drift_parameters, initial_data)
 
-        A = self.diffusion.decomposition(timestep) # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
+        A = self.diffusion.decomposition(timestep, diffusion_parameters) # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
 
         if self.diffusion.diagonal_form:
             decomposition_product = A.squeeze(1) * z
@@ -197,13 +198,13 @@ class SDE:
 
         return mean + decomposition_product, z # x(t)=mu(t) + A(t) z_t, z_t
 
-    def mean(self, timestep, initial_data):
+    def mean(self, timestep, drift_parameters, initial_data):
         """
         timestep \in R\\
         initial_data \in R^(n)
         """
 
-        exp_F = self.drift.solution_matrix(timestep)
+        exp_F = self.drift.solution_matrix(timestep, drift_parameters)
 
         if self.drift.diagonal_form:
             mean = exp_F.squeeze(1) * initial_data
@@ -212,16 +213,16 @@ class SDE:
 
         return mean
 
-    def score(self, timestep, initial_data, data):
+    def score(self, timestep, drift_parameters, diffusion_parameters, initial_data, data):
         """
         Returns the score:   Σ^(-1)(t) (x(t)-μ(t))
         """ 
         if self.diffusion.diagonal_form:
-            return -self.diffusion.inv_covariance(timestep) * (data-self.mean(timestep, initial_data))
+            return -self.diffusion.inv_covariance(timestep, diffusion_parameters) * (data-self.mean(timestep, drift_parameters, initial_data))
         else:
-            return -self.diffusion.inv_covariance(timestep) @ (data-self.mean(timestep, initial_data))
+            return -self.diffusion.inv_covariance(timestep, diffusion_parameters) @ (data-self.mean(timestep, drift_parameters, initial_data))
 
-    def reverse_time_derivative(self, noisy_data, model_output, timestep, key):
+    def reverse_time_derivative(self, noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, key):
         """
         Evaluate dx/dt at noisy_data,t\\
         TODO: Talk to klaus about the correctness of this (should be resolved)\\
@@ -232,17 +233,17 @@ class SDE:
         noise = jax.random.normal(key, noisy_data.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same. Answer: Yes, they should
 
         # Find mean of noisy data at timestep t
-        Fx = self.mean(timestep, noisy_data) 
+        Fx = self.mean(timestep, drift_parameters, noisy_data) 
 
         # Find diffusion at timestep t
-        L = self.diffusion(timestep)
+        L = self.diffusion(timestep, diffusion_parameters)
 
         # Finds core at timestep t based on the intial data and the noisy data
         if self.model_target == "epsilon":
             if self.diffusion.diagonal_form:
-                score = - self.diffusion.inv_decomposition(timestep).squeeze(1) * model_output
+                score = - self.diffusion.inv_decomposition(timestep, diffusion_parameters).squeeze(1) * model_output
             else:
-                score = -self.diffusion.inv_decomposition(timestep) @ model_output
+                score = -self.diffusion.inv_decomposition(timestep, diffusion_parameters) @ model_output
 
         elif self.model_target == "score":
             score = model_output
@@ -275,7 +276,7 @@ class SDE:
 
         return dxdt
 
-    def step(self, model_output, timestep, noisy_data, key, dt):
+    def step(self, model_output, timestep, drift_parameters, diffusion_parameters, noisy_data, key, dt):
         """
         Remove noise from image using the reverse SDE
         dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
@@ -284,7 +285,7 @@ class SDE:
         
 
         # evaluate reverse SDE in the current datapoint and timestep
-        dxdt = self.reverse_time_derivative(noisy_data, model_output, timestep, noise_key)
+        dxdt = self.reverse_time_derivative(noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, noise_key)
 
         ### Euler ###
         dx = dt*dxdt # h*f(t,x)
@@ -292,7 +293,7 @@ class SDE:
 
         return euler_data, dxdt, key
 
-    def step_correct(self, model_output_euler_data, timestep, noisy_data, euler_data, dxdt, key, dt):
+    def step_correct(self, model_output_euler_data, timestep, drift_parameters, diffusion_parameters, noisy_data, euler_data, dxdt, key, dt):
         """
         Perform Runge kutta correction update step.\\
         Should follow self.step() function using a seconday new model output based on the data returned in self.step().
@@ -310,7 +311,7 @@ class SDE:
         ls = dt * (1-1/(2*a))* dxdt # left side  --  dxdt = f(t,x), identical to what was used in the self.step() function
 
         # rs = dt * 1/(2*a) * d(t+dt*a, new_data)
-        rs = dt/(2*a) * self.reverse_time_derivative(euler_data, model_output_euler_data, timestep+a*dt, noise_key) # right side
+        rs = dt/(2*a) * self.reverse_time_derivative(euler_data, model_output_euler_data, drift_parameters, diffusion_parameters, timestep+a*dt, noise_key) # right side
 
         # x + ls + rs
         corrected_step_data = noisy_data + ls + rs
@@ -344,24 +345,38 @@ if __name__ == "__main__":
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 
     t = Symbol('t', nonnegative=True, real=True)
+    drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
+    x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
+    drift_param = Matrix([x1,x2,x3])
+    diffusion_param = Matrix([x4,x5])
+    print(drift_param[0])
+
+    v_drift_param =  jnp.array([[1.],[1.],[1.]])
+    v_diffusion_param =  jnp.array([[4.],[4.]])
+
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1,1,1.5]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
+    timesteps = jnp.array([0.1,1.5]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
 
     n = 1 # dims of problem
 
-    x0 = jnp.ones((len(timesteps), n))
+    x0 = jnp.ones((len(timesteps), n))*1/2
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
 
-    F = Matrix.diag([sympy.cos(t)]*n)
-    L = Matrix.diag([sympy.sin(t)]*n)
+    F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
     Q = Matrix.eye(n)
 
     # Normal test
-    sde = SDE(t, F, L, Q, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
-    normal_matrix = sde.sample(timesteps, x0, key)[0]
-
+    sde = SDE(t, drift_param, diffusion_param, F, L, Q, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
+    normal_matrix = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
+    grad_sample = jax.jacobian(lambda t, drift_p, diff_p, data, key: sde.sample(t,drift_p,diff_p, data, key)[0], (1,2))
+    grads = grad_sample(timesteps, v_drift_param, v_diffusion_param, x0, key)
+    print(jnp.squeeze(grads[0]))
+    
+    import sys
+    sys.exit(0)
     # Integral test
     sde = SDE(t, F, L, Q, drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
     integral_matrix = sde.sample(timesteps, x0, key)[0]
