@@ -74,20 +74,20 @@ This is always the case
 
 
 We also want 
-$\mu(t=1)=0$
+$$\mu(t)\rightarrow 0  ~~|~~ t\rightarrow 1$$
 
 At the same time we have that 
-$\pmb{\exp}\left(\int_{0}^{t} F(\tau)d\tau\right)=0 ~~|~~t=1$
+$$\pmb{\exp}\left(\int_{0}^{t} F(\tau)d\tau\right) \rightarrow 0 ~~|~~t \rightarrow 1$$
 meaning that 
-$\int_{0}^{t} F(\tau)d\tau=-\infty ~~|~~ t=1$
+$$\int_{0}^{t} F(\tau)d\tau \rightarrow -\infty ~~|~~ t \rightarrow 1$$
 
-$\hat F(t)-\hat F(0)=-\infty ~~|~~ t=1$
+$\hat F(t)-\hat F(0) \rightarrow -\infty ~~|~~ t \rightarrow 1$
 
 This means that one of the two (or both) need to have a limit that as they go towards their thing they need to become $-\infty$
 
 There could be some problems with finding $\hat F(0) = \inf$
 So we look for 
-$\hat F(t) = -\inf ~~|~~t=1$
+$$\hat F(t)  \rightarrow  -\inf ~~|~~t \rightarrow 1$$
 
 This could be:
 $\hat F(t) = \cfrac{-1}{t-1}$
@@ -109,6 +109,146 @@ There is one problem here. The direction we take the limit from is important to 
 Since our interval is \[0;1\], we approach from the left (1) in our limit as this is the only side that is within our interval.
 This will result in $\hat F(t) = -\infty$ for $k<0$.
 Therefore all is good
+
+# Bijective map from $[0,1[ \rightarrow [0,\infty[$
+
+Applying parameters in the space $[0,1]$ would result in constrained optimization, which is hard in NNs.
+Therefore we wish to map 
+
+Functions that satisfy this map are:
+$\tan(x*pi/2)$
+$\cfrac{1}{x-1}$
+$\cfrac{x}{x-1}$
+$\cfrac{x}{\sqrt{x^2-1}}$
+
+## Bijective mapping of $[0,\infty[\rightarrow[0,-\infty[$
+
+Just hit it with the $-$
+
+$f(x)=-g(x)$
+
+# Bijective map from $]0,1[ ~~\rightarrow ~~]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+
+This would allow true unconstrainted use of parameters in the middle space
+
+## Bijective map from $]0,1[ ~~\rightarrow ~~]-\infty,\infty[$
+
+A function that does this is:
+$f(x)=1-\ln(1/x-1)$
+
+We need to apply parameters such that the result will go to $+\infty$
+else we cannot guarantee that $t=1$ maps to $-\infty$
+
+If we want to use a polynomial, we must ensure that it follows this property. 
+This could be done by letting the quickest scaling factor have forced positive coefficient.
+This would result in constraint optimization if we don't do something to it.
+One way would be to take the absolute value of it. This however still allows for it to become 0, and that would break the math.
+Another way is to not have it as a parameter. 
+This would result in a slightly less flexible model, but would maintain the math without fault.
+
+An example could be
+
+We define:
+$t_1 = 1-\ln(1/x-1)$
+$t_1 \in ]-\infty;\infty[$
+
+With parameters
+$a,b,c,d \in R$
+
+Then the polynomial
+$f(x) = a + b t_1 + c t_1^2 + d t_1^3 +t_1^4$
+
+
+## Bijective map from $]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+
+A function that does this is:
+$-e^x$
+
+## Combined
+
+$-e^{1-\ln(1/x-1)}$
+
+$-e^{1-\ln(1/x-1)}=\cfrac{-e^1}{e^{\ln(1/x-1)}}=\cfrac{-e}{1/x-1}$
+$e^{\ln(1/x-1)}=1/x-1$
+
+
+$\cfrac{-e}{1/x-1} = \cfrac{-ex}{x-1}$
+
+
+### Other possible functions:
+
+
+#### 1:
+$\cfrac{-x}{x-1} = \cfrac{-1}{1/x-1}$
+		  $= \cfrac{-1}{e^{\ln(1/x-1)}}$
+		  $= -e^{-\ln(1/x-1)}$
+
+This results in the map
+$]0,1[ ~~\rightarrow ~~]-\infty,\infty[$
+being
+$$-\ln(1/x-1)$$
+
+and the map from
+$]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+being
+$$-e^x$$
+
+
+#### 2:
+$\cfrac{-1}{x-1}$
+$= \cfrac{-1/x}{1/x-1}$
+$= \cfrac{-e^{\ln(-1/x)}}{e^{\ln(1/x-1)}}$
+$= -e^{ln(1/x)-\ln(1/x-1)}$
+$= -e^{ln(\cfrac{1/x}{1/x-1})}$
+$= -e^{ln(\cfrac{1}{1-x})}$
+
+This results in the map
+$]0,1[ ~~\rightarrow ~~]-\infty,\infty[$
+being
+$$\ln(1/(1-x))$$
+
+and the map from
+$]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+being
+$$-e^x$$
+
+#### 3:
+
+$-\ln(1/(1-x))=z$
+
+$1/(1-x)=e^z$
+$1=e^z*(1-x)$
+$1=e^z- x*e^z$
+$\cfrac{-1+e^z}{e^z}=x$
+$-1/e^z+1=x$
+
+
+
+# Bijective mapping of $[0,\infty[\rightarrow[0,1[$
+
+The amount of functions that easily fulfill the above are limited.
+It would be nice if we instead could use functions like polynomials.
+
+Therefore we look into using a bijective mapping from $R_+$ to $[0,1[$.
+This projects any function we could desire into our space, excluding $1$ but that is a willing sacrifice.
+
+Such a function could be:
+
+$$1-\cfrac{a}{f(x)+a} ~~~~ (1)$$
+Which maps to $[0,1[$
+or
+$$\tan^{-1}(a*f(x))~~~~ (2)$$
+Which maps to $[0,1.571[$
+- $1.571$ is the maximum value achieved when the maximum value of float64 is used:
+	- 1.571 = arctan(1.7E+308)
+- This can be transformed to the correct space by scaling with factor
+- $1/1.571$
+$$\cfrac{\tan^{-1}(a*f(x))}{1.571}~~~~ (3)$$
+Which maps from $[0,1[$
+
+These both hold to this mapping.
+
+
 
 # Remember
 
@@ -147,3 +287,5 @@ The same might apply for Covar
 ## Forcing LQL to be positive definite
 
 ALQLA where A is some matrix that is frozen.
+
+## Make sure functions in F and L are differentiable with respect to parameters

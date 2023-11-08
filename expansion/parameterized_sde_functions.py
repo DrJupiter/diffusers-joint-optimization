@@ -148,4 +148,92 @@ for i in np.linspace(-2,2,100):
 
 # %%
 (-1/(t**(-3)-1)).simplify()
+
+
+
+
+
+
+
+
+
+
+
+
+
+# %%
+import sympy as sp
+import numpy as np
+import matplotlib.pyplot as plt
+
+def from_01_to_minfinf(x):
+    return -sp.ln(1/x-1)
+
+def minfinf_to_0minf(x):
+    return -sp.exp(x)
+
+def polynomial(x,params):
+    summ = 0
+    for i,param in enumerate(params):
+        summ += param*x**i
+    return summ
+
+def exp_like_func(x):
+    return sp.exp(x)/(sp.exp(x) + 1)
+
+a,b,c,d,t,x,z = sp.symbols("a,b,c,d,t,x,z",real=True)
+
+t1 = from_01_to_minfinf(t)
+
+# params = [a,b,c,d]
+params = [1,2,3,1]
+
+# Taylor of func
+def taylor_of_f(f,step,eval_point,x):
+    f_mi = sp.diff(f,x,step)
+    diff = (x-eval_point)**step
+    return f_mi/sp.factorial(step)*diff
+
+# params = [taylor_of_f(exp_like_func(t), n, t, t).simplify() for n in range(5)]
+params = [taylor_of_f(t**2, n, t, t).simplify() for n in range(5)]
+
+
+# params = [1/sp.factorial(n) for n in range(200)]
+
+t2 = minfinf_to_0minf(polynomial(t1,params))
+# t2 = minfinf_to_0minf(exp_like_func(t1).simplify())
+
+t2
+
+#%%
+t2.subs(t,0.9)
+
+
+#%%
+import numpy as np
+
+N = 100
+eps = 1e-6
+linspace = np.array(range(N),dtype=np.float32)/(N)+eps # 100 values in [0,1]
+
+y_space = np.array([-t2.subs(t,t_i).evalf() for t_i in linspace])
+# y_space = np.array([(sp.exp(1)*t**2).subs(t,t_i).evalf() for t_i in linspace])
+
+
+plt.plot(linspace,y_space)
+# plt.yscale("log")
+plt.ylabel("negative value (for log scale)")
+plt.xlabel("t in ]0,1[")
+plt.show()
+
+# %%
+min(y_space),max(y_space)
+
+y_space[np.argmin(np.abs(y_space-1))] # cloest to 1
+
+
+# %%
+linspace
+# %%
+y_space
 # %%
