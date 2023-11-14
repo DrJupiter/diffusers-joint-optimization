@@ -45,7 +45,7 @@ class TrainingConfig:
 
     center_crop = False
     random_flip = True
-    resolution = 32
+    resolution = 128 # 32
 
 # HYPER PARAMETERS
     seed = 0
@@ -59,7 +59,7 @@ class TrainingConfig:
 
     save_dir = "pokemon-test-tti"
     push_to_hub = True
-    pretrained_model_or_path ="CompVis/stable-diffusion-v1-4" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path ="stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
 @dataclass
