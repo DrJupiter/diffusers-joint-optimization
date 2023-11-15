@@ -24,19 +24,20 @@ class TorchSDE(SDE_PARAM):
 
         jax_drift_parameters = jnp.array(drift_parameters.numpy(force=True))
         jax_diffusion_parameters = jnp.array(diffusion_parameters.numpy(force=True))
-        super().v_lambdified_sample(jax_timestep, jax_initial_data, jax_noise, jax_drift_parameters, jax_diffusion_parameters)
+        sample = self.v_lambdified_sample(jax_timestep, jax_initial_data, jax_noise, jax_drift_parameters, jax_diffusion_parameters)
+        return torch.from_numpy(np.array(sample.reshape(original_shape))).to(device)
 
+    # TODO (KLAUS): REMOVE LEGACY SAMPLE AFTER REFACTOR
+    #def sample(self, timestep, initial_data, key, device='cuda'):
 
-    def sample(self, timestep, initial_data, key, device='cuda'):
+    #    # TODO (TECHNICALLY) there is no need to not take in a jax numpy array and then at the final step convert it to a tensor.
+    #    batch_size = timestep.shape[0]
+    #    original_shape = initial_data.shape
+    #    jax_timestep = jnp.array(timestep.reshape(-1).numpy(force=True))
+    #    jax_initial_data = jnp.array(initial_data.reshape(batch_size, -1).numpy(force=True))
 
-        # TODO (TECHNICALLY) there is no need to not take in a jax numpy array and then at the final step convert it to a tensor.
-        batch_size = timestep.shape[0]
-        original_shape = initial_data.shape
-        jax_timestep = jnp.array(timestep.reshape(-1).numpy(force=True))
-        jax_initial_data = jnp.array(initial_data.reshape(batch_size, -1).numpy(force=True))
-
-        noisy_data, noise = super().sample(jax_timestep, jax_initial_data, key)
-        return torch.from_numpy(np.array(noisy_data.reshape(original_shape))).to(device), torch.from_numpy(np.array(noise.reshape(original_shape))).to(device) 
+    #    noisy_data, noise = super().sample(jax_timestep, jax_initial_data, key)
+    #    return torch.from_numpy(np.array(noisy_data.reshape(original_shape))).to(device), torch.from_numpy(np.array(noise.reshape(original_shape))).to(device) 
     
     def set_timesteps(self,num_inference_steps, device):
         self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device)
