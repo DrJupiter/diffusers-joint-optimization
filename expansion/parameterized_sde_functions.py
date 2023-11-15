@@ -16,12 +16,12 @@ def test1_commuting_Ft(Ft):
 
 def test2_1_covar_time(Sigma):
     t0 = Sigma.subs(t,0) == sp.zeros(Sigma.shape[0])
-    t1 = Sigma.subs(t,1) == sp.eye(Sigma.shape[0])
+    t1 = Sigma.subs(t,1) != sp.eye(Sigma.shape[0])
     
     if not t0:
         print(f"Sigma(0)={Sigma.subs(t,0)} not {sp.zeros(Sigma.shape[0])}")
     if not t1:
-        print(f"Sigma(1))={Sigma.subs(t,1)} not {sp.eye(Sigma.shape[0])}")
+        print(f"Sigma(1))={Sigma.subs(t,1)} Which should'nt be {sp.zeros(Sigma.shape[0])}")
 
     if t1 and t0:
         print("Sigma upholds the correct values at t=0 and t=1")
@@ -51,7 +51,7 @@ def test3_covar_pos_definite(Sigma):
     eigenvals = list(Sigma.eigenvals().keys())
     for eigval in eigenvals:
 
-        print(eigval)
+        # print(eigval)
 
         for i in np.linspace(0,1-1e-6,100): # Very hacky to make the range [0,1[ instead of [0,1]
             if not eigval.subs(t,i) >= 0:
@@ -181,12 +181,12 @@ def polynomial(x,params):
 def exp_like_func(x):
     return sp.exp(x)/(sp.exp(x) + 1)
 
-a,b,c,d,t,x,z = sp.symbols("a,b,c,d,t,x,z",real=True)
-
 t1 = from_01_to_minfinf(t)
 
-# params = [a,b,c,d]
-params = [1,2,3,1]
+
+a,b,c,d,t,x,z = sp.symbols("a,b,c,d,t,x,z",real=True)
+params = [a,b,c,d] # 3rd degree poly
+# params = [1,2,3,1]
 
 # Taylor of func
 def taylor_of_f(f,step,eval_point,x):
@@ -195,19 +195,13 @@ def taylor_of_f(f,step,eval_point,x):
     return f_mi/sp.factorial(step)*diff
 
 # params = [taylor_of_f(exp_like_func(t), n, t, t).simplify() for n in range(5)]
-params = [taylor_of_f(t**2, n, t, t).simplify() for n in range(5)]
-
-
+# params = [taylor_of_f(t**2, n, t, t).simplify() for n in range(5)]
 # params = [1/sp.factorial(n) for n in range(200)]
 
 t2 = minfinf_to_0minf(polynomial(t1,params))
 # t2 = minfinf_to_0minf(exp_like_func(t1).simplify())
 
 t2
-
-#%%
-t2.subs(t,0.9)
-
 
 #%%
 import numpy as np
@@ -227,13 +221,141 @@ plt.xlabel("t in ]0,1[")
 plt.show()
 
 # %%
+
+
 min(y_space),max(y_space)
 
 y_space[np.argmin(np.abs(y_space-1))] # cloest to 1
 
 
+
+
+
+
+
+#%%
+t1 = from_01_to_minfinf(t)
+
+a0,a1,a2,b0,b1,b2,c0,c1,c2,d0,d1,d2,t = sp.symbols("a0,a1,a2,b0,b1,b2,c0,c1,c2,d0,d1,d2,t",real=True)
+params0 = [a0,b0,c0] # 2rd degree poly
+params1 = [a1,b1,c1] # 2rd degree poly
+params2 = [a2,b2,c2] # 2rd degree poly
+
+f0 = minfinf_to_0minf(polynomial(t1,params0))
+f1 = minfinf_to_0minf(polynomial(t1,params1))
+f2 = minfinf_to_0minf(polynomial(t1,params2))
+
+FF = sp.Matrix(
+    [
+        [f0,0,0],
+        [0,f1,0],
+        [0,0,f2]
+    ]
+)
+
+test1_commuting_Ft(FF)
 # %%
-linspace
+
+u = sp.symbols("".join([f"u_{i} " for i in range(9)]),real=True)
+
+A_f = sp.Matrix(
+    [
+        [u[0],u[1],u[2]],
+        [u[3],u[4],u[5]],
+        [u[6],u[7],u[8]]
+    ]
+    )
+
+A_d = sp.Matrix(
+    [
+        [u[0],0,0],
+        [0,u[1],0],
+        [0,0,u[2]]
+    ]
+)
+
+test1_commuting_Ft(A_d@FF@A_d.T)
+
 # %%
-y_space
+A_d@FF@A_d.T
+# %%
+
+test3_covar_pos_definite(A_d.subs({u[0]:1,u[1]:2,u[2]:3}))
+# %%
+lf0 = polynomial(t,params0)
+lf1 = polynomial(t,params1)
+lf2 = polynomial(t,params2)
+
+val = 1
+d = {a0:val,a1:val,a2:val,b0:val,b1:val,b2:val,c0:val,c1:val,c2:val}
+
+L = sp.Matrix(
+    [
+        [lf0,0,0],
+        [0,lf1,0],
+        [0,0,lf2]
+    ]
+)
+
+SS = sp.integrate(L@sp.eye(3)@L.T,t)
+
+
+
+#%%
+test2_1_covar_time(SS)
+test3_covar_pos_definite(SS.subs(d))
+list(SS.eigenvals().keys())
+#%%
+
+# %%
+
+
+Lt = sp.Matrix(
+    [
+        [t**2,sp.sin(t),sp.cos(t)],
+        [t**3,1/t,t/(t+1)],
+        [a0,t,t**(-1)]
+    ]
+)
+
+LL = Lt@np.eye(3)@Lt.T
+
+print("LL sym = ",LL==LL.T)
+
+LL
+
+# %%
+
+sp.integrate(Lt,t)
+# %%
+
+
+Lt = sp.Matrix(
+    [
+        [t,t**2,t**3],
+        [t**4,t**5,t**6],
+        [t**7,t**8,t**9],
+    ]
+    )
+
+At = sp.Matrix(
+    [
+        [0,0,0],
+        [0,a1,0],
+        [0,0,0]
+    ]
+)
+
+At@Lt@Lt.T@At.T
+# %%
+
+Lt = sp.Matrix(
+    [
+        [t,0,-t],
+        [0,-t,0],
+        [-t,0,-1],
+    ]
+    )
+
+Lt@Lt.T
 # %%

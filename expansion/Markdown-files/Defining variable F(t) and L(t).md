@@ -13,7 +13,9 @@ Two matrices commute if $AB = BA$
 If the product of two [symmetric matrices](https://en.wikipedia.org/wiki/Symmetric_matrix "Symmetric matrix") is symmetric, then they must commute. 
 That also means that every diagonal matrix commutes with all other diagonal matrices.[8](https://en.wikipedia.org/wiki/Commuting_matrices#cite_note-8)[9](https://en.wikipedia.org/wiki/Commuting_matrices#cite_note-9)
 
-### Commuting with your own integral rules
+### Diagonal tricks
+
+
 
 ## Restriction 2:   t=0: Covar and mean
 Ensuring the multivariate distribution is a single point at the initial time
@@ -55,7 +57,7 @@ Easiest to choose it as identity
 $\pmb{\mu}(t) = \pmb{\exp}\left(\int_{0}^{t} F(\tau)d\tau\right)x(0)$
 $\pmb{\Sigma}(t) = \int_{0}^{t} L(s)Q L(s)^{T}ds$
 
-## impact
+# Deriving formulas for parameterised Drift
 
 Since we want
 $\mu(t=0)=x_0$
@@ -110,7 +112,7 @@ Since our interval is \[0;1\], we approach from the left (1) in our limit as thi
 This will result in $\hat F(t) = -\infty$ for $k<0$.
 Therefore all is good
 
-# Bijective map from $[0,1[ \rightarrow [0,\infty[$
+## Bijective map from $[0,1[ \rightarrow [0,\infty[$
 
 Applying parameters in the space $[0,1]$ would result in constrained optimization, which is hard in NNs.
 Therefore we wish to map 
@@ -127,7 +129,7 @@ Just hit it with the $-$
 
 $f(x)=-g(x)$
 
-# Bijective map from $]0,1[ ~~\rightarrow ~~]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+## Bijective map from $]0,1[ ~~\rightarrow ~~]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
 
 This would allow true unconstrainted use of parameters in the middle space
 
@@ -159,12 +161,12 @@ Then the polynomial
 $f(x) = a + b t_1 + c t_1^2 + d t_1^3 +t_1^4$
 
 
-## Bijective map from $]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
+### Bijective map from $]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
 
 A function that does this is:
 $-e^x$
 
-## Combined
+### Combined
 
 $-e^{1-\ln(1/x-1)}$
 
@@ -222,9 +224,7 @@ $1=e^z- x*e^z$
 $\cfrac{-1+e^z}{e^z}=x$
 $-1/e^z+1=x$
 
-
-
-# Bijective mapping of $[0,\infty[\rightarrow[0,1[$
+## Bijective mapping of $[0,\infty[\rightarrow[0,1[$
 
 The amount of functions that easily fulfill the above are limited.
 It would be nice if we instead could use functions like polynomials.
@@ -247,6 +247,131 @@ $$\cfrac{\tan^{-1}(a*f(x))}{1.571}~~~~ (3)$$
 Which maps from $[0,1[$
 
 These both hold to this mapping.
+
+
+
+
+# Deriving formulas for parameterised diffusion
+
+We want to figure out how to choose $L(s)$ such that the restrictions 2, 2.5, 3, met
+assuming $Q=I$ (such that 4 is already met).
+
+Since most constraints fall on the covariance and not $L(s)$ we work back from that:
+
+The covariance is given by:
+$\pmb{\Sigma}(t) = \int_{0}^{t} L(s)Q L(s)^{T}ds$
+
+We require that 
+- $\Sigma(t)$ is positive definite 
+and that:
+- $\pmb{\Sigma}(0) = 0$
+- $\pmb{\Sigma}(1) \neq 0$ 
+
+Lets first look at the time-value constraints.
+
+## Constraint $\pmb{\Sigma}(0) = 0$
+Similar to the drift, we have that when we integrate from 0 to 0, we always have 0:
+So this constraint will be fulfilled not matter what shape $L(s)$ takes.
+
+## Constraint $\pmb{\Sigma}(1) \neq 0$
+
+This constraint can be fulfilled in multiple different ways:
+
+### Squared values and additive term
+
+We could square all the functions in $\Sigma$, such that they will always be $\geq 0$. And then we could add a additive term to the functions.
+This forces all values to be positive in the function as such the integral cannot be 0.
+
+The reason we need to square the function first, is else we could run into a situation where the values are 0, or exactly equalize the additive term.
+
+### Functions where $|f(t)|>0 ~~|~~0 < t \leq 1$
+
+Per restriction $\Sigma(t) ~~|~~t>0$ must be positive definite
+
+One way to do this is making sure $\Sigma(t)$ is fully positive.
+
+Looking at $\Sigma$ we see that:
+
+$\Sigma(t) = (\int L L^T)(t=t) - (\int L L^T)(t=0)$
+- Saying that the integral is evaluated in t=
+
+If we want $\Sigma$ to be fully positive we must have
+- $(\int L L^T)(t=t) > (\int L L^T)(t=0)$
+
+A way to ensure this is to [square every function (or maybe only parameters)] and say that [every function must obey]:
+- $|f(t)|>0 ~~|~~0 < t \leq 1$
+Or 
+- $f(t)^2>0 ~~|~~ 0<t\leq 1$
+
+It is important to consider that this must also be the case for every parameter.
+
+$f(t,\theta)^2>0 ~~|~~ 0<t\leq 1~,~ \forall \theta \in R$
+
+This means polynomials consisting of multiple parts are a problem as they can have stationary points in this interval.
+- Unless we square the parameters individually, creating monotonically increasing functions.
+- This would also result in the requirement being satisfied.
+
+
+
+
+
+#### Diagonal $L$
+
+In the case of a diagonal $L$ this is forced
+
+If it is not, then squaring the values could be a good idea
+
+This would also force the matrix to always be [positive definite]
+
+
+We know that any totally positive matrix has only positive eigenvalues
+
+and that $A A^T$ results in a symmetric matrix
+
+So if we let all values in $L$ be positive, we will guarantee a positive definite matrix. Not matter if it is diagonal or not.
+
+One way we could do this is simply by squaring all values
+
+
+
+## Forcing positive definite 
+
+It might be possible to force any matrix to be positive definite by multiplying it with other matrices
+
+Or we can take all parameters squared in the math
+
+
+Again we have that n
+
+### Form
+
+#### AL Form
+We define a matrix $A$ that stores parameters
+
+We then define $L = AL$
+such that
+$LL^T = ALL^TA^T$
+When we int we can then
+$A \int (L L^T) A^T$
+
+This way we can apply parameters easily to everything.
+
+Additionally we know that if $LL^T$ is positive definite, then $ALL^TA^T$ is as well
+
+Using this method we would define each entry in $L$ as a singular function
+The dot product with $A$ would then parameterize and distribute it.
+
+#### Full parameterization form
+
+This way each entry is a sum of function with their own parameters like:
+$A[0,0]=a*t^2+b*\sin(t)+c*e^t$
+Each entry has its own set of parameters, controlling which functions are expressed how much.
+
+This allows direct control of how it works
+
+
+
+
 
 
 
