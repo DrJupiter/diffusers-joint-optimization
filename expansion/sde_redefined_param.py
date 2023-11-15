@@ -173,6 +173,7 @@ class SDE_PARAM:
         self.variable = variable
         self.drift_parameters = drift_parameters
         self.diffusion_parameters = diffusion_parameters 
+        self.module = module
 
         self.drift = DRIFT(variable, drift_parameters, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
         self.diffusion = DIFFUSION(variable, diffusion_parameters, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
@@ -185,9 +186,49 @@ class SDE_PARAM:
         # batch_dim is one, because inputs will be vmapped or vectorized in another fashion.
         self.batch_dim = 1
         self.data_dim = sympy.symbols("data_dim", integer=True, nonnegative=True)
+
         self.symbolic_input = sympy.MatrixSymbol("X", self.batch_dim, self.data_dim)
 
         self.symbolic_noise = sympy.MatrixSymbol("z", self.batch_dim, self.data_dim)
+
+
+    def lambdify_symbolic_functions(self, data_dimension):
+        """
+        Initialize The functions calculated symbolically for a specific data dimension,
+        so they can be called within the specifc module
+        """
+
+        # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
+        symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
+        symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
+        symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
+
+        # SAMPLE
+        self.lambdified_sample = lambdify([self.variable, self.symbolic_input.subs({self.data_dim:data_dimension}),self.symbolic_noise.subs({self.data_dim:data_dimension}), self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
+
+        # DERIVATIVE OF SAMPLE W.R.T DRIFT AND DIFFUSION 
+        drift_derivative = symbolic_sample.diff(self.drift_parameters)
+        diffusion_derivative = symbolic_sample.diff(self.diffusion_parameters)
+
+        lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module)
+        lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module)
+
+        # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
+        if self.module == "jax":
+            self.lambdified_drift_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_drift_derivative(t, data, noise, drift, diffusion)).T 
+            self.lambdified_diffusion_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_diffusion_derivative(t, data, noise, drift, diffusion)).T 
+
+        else:
+            self.lambdified_drift_derivative = lambdified_drift_derivative
+            self.lambdified_diffusion_derivative = lambdified_diffusion_derivative
+
+            print("derivatives haven't been converted to numerator layout. Consider if this is relevant for your use case. Otherwise squeeze and transpose the output to achieve this.")
+
+        if self.module == "jax":
+            # TODO (KLAUS): HOPEFULLY WE CAN JUST USE THIS IN THE TORCH CASE, WE HAVE TO CHECK IF IT WILL ALLOW US TO LAMBIDIFY
+            self.v_lambdified_sample = jax.vmap(self.lambdified_sample, (0, 0, 0, None, None)) 
+            self.v_lambdified_drift_derivative = jax.vmap(self.lambdified_drift_derivative, (0, 0, 0, None, None))
+            self.v_lambdified_diffusion_derivative = jax.vmap(self.lambdified_diffusion_derivative, (0, 0, 0, None, None))
     
     def symbolic_sample(self):
         """
@@ -210,7 +251,7 @@ class SDE_PARAM:
         else:
             decomposition_product = self.symbolic_noise @ A.T 
 
-        return mean + decomposition_product, self.symbolic_noise # x(t)=mu(t) + A(t) z_t, z_t
+        return mean + decomposition_product # x(t)=mu(t) + A(t) z_t, z_t
 
     def symbolic_mean(self):
         """
@@ -226,8 +267,7 @@ class SDE_PARAM:
             mean = self.symbolic_input @ exp_F.T 
 
         return mean
-    
-    
+      
 
     def sample(self, timestep, drift_parameters, diffusion_parameters, initial_data, key):
         """
@@ -403,75 +443,72 @@ if __name__ == "__main__":
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
     drift_param = Matrix([x1,x2,x3])
     diffusion_param = Matrix([x4,x5])
-    print(drift_param[0])
 
     v_drift_param =  jnp.array([1.,1.,1.])
     v_diffusion_param =  jnp.array([4.,4.])
 
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1, 0.15]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
+    timesteps = jnp.array([0.1,0.4]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
 
-    n = 2 # dims of problem
+    n = 3 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))*1/2
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
 
-    F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
+    F = Matrix.diag([[sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]],[t*drift_param[2]], [t]])
+    #F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
+    #L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
+    L = Matrix.diag([[sympy.sin(t)*diffusion_param[0]+diffusion_param[1]],[t * diffusion_param[1] ], [t]])
     Q = Matrix.eye(n)
 
     # Normal test
     sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
-    sde.symbolic_mean()
-    symbolic_sample = sde.symbolic_sample()[0].subs({sde.data_dim: n})
-    print(symbolic_sample.shape)
+    sde.lambdify_symbolic_functions(n)
+    symbolic_sample = sde.symbolic_sample().subs({sde.data_dim: n})
     #print(symbolic_sample)
     #symbolic_sample = sympy.simplify(symbolic_sample)
     ss = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  symbolic_sample, "jax")
-    print(sympy.simplify(symbolic_sample.diff(sde.drift_parameters)).doit().shape)
-    ss_derivate_drift = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  sympy.simplify(symbolic_sample.diff(sde.drift_parameters)).reshape(len(drift_param)), "jax")
-    import inspect
+    ss_derivate_drift = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  sympy.simplify(symbolic_sample.diff(sde.drift_parameters)), "jax")
+    num_ss_derivate_drift = lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T
     key2, subkey = jax.random.split(key)
     z = jax.random.normal(subkey, x0.shape)
     #print(ss(timesteps, x0, z, v_drift_param, v_diffusion_param))
     v_ss = jax.vmap(ss, (0,0, 0, None, None))
-    v_ss_drift = jax.vmap(ss_derivate_drift, (0,0, 0, None, None))
+    v_ss_drift = jax.vmap(lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T, (0,0, 0, None, None))
     out_v = v_ss(timesteps, x0, z, v_drift_param, v_diffusion_param)
+    print(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param)) 
     print(out_v)
     
     normal_matrix = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
     print(normal_matrix)
+    print(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    print(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     out_v_grad = v_ss_drift(timesteps, x0, z, v_drift_param, v_diffusion_param)
-    print(out_v_grad.shape)
+    print(out_v_grad)
     grad_sample = jax.jacobian(lambda t, drift_p, diff_p, data, key: sde.sample(t,drift_p,diff_p, data, key), (1,2))
     grads = grad_sample(timesteps, v_drift_param, v_diffusion_param, x0, key)
-    print((grads[0]))
-    print(ss_derivate_drift(timesteps[0],x0[0], z[0], v_drift_param, v_diffusion_param).shape)
+    print(grads[0][0])
     
-    import sys
-    sys.exit(0)
     # Integral test
-    sde = SDE_PARAM(t, F, L, Q, drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
-    integral_matrix = sde.sample(timesteps, x0, key)[0]
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
+    integral_matrix = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
 
     # Diagonal tests
-    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
-    normal_vector = (sde.sample(timesteps, x0, key)[0])
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
+    normal_vector = (sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0])
     
-    print((sde.sample(timesteps, jnp.ones((len(timesteps), 435580)), key)[0]).shape)
-    #assert jnp.array_equal(normal_vector, custom_vector)
 
-    sde = SDE_PARAM(t, F.diagonal(), L, Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=True)
-    normal_diag_matrix_0 = sde.sample(timesteps, x0, key)[0]
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L, Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=True)
+    normal_diag_matrix_0 = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
 
-    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=False)
-    normal_diag_matrix_1 = sde.sample(timesteps, x0, key)[0]
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=False)
+    normal_diag_matrix_1 = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
 
     # Diagonal Integral tests
-    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
-    integral_vector = sde.sample(timesteps, x0, key)[0]
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q.diagonal(), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
+    integral_vector = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
     print(integral_matrix.device(), integral_vector.device())
     assert jnp.array_equal(normal_matrix, normal_vector)
     assert jnp.array_equal(normal_vector, normal_diag_matrix_0)
@@ -495,10 +532,10 @@ if __name__ == "__main__":
 
     model_out = jnp.ones((len(timesteps), n))
     h = 0.05 # aka dt -- too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
-    prev_x, dxdt, key = sde.step(model_output = model_out, timestep = timesteps, noisy_data = x0, key=key, dt=h)
+    prev_x, dxdt, key = sde.step(model_out, timesteps, v_drift_param, v_diffusion_param, noisy_data = x0, key=key, dt=h)
     print(f"Step test shape = {prev_x.shape}")
 
     model_out2 = jnp.ones((len(timesteps), n))*2
-    new_x, key = sde.step_correct(model_out2, timesteps, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
+    new_x, key = sde.step_correct(model_out2, timesteps, v_drift_param, v_diffusion_param, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
     print(f"Step correct test shape = {new_x.shape}")
     print("Step and Step correct tests run :)")
