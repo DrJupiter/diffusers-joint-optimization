@@ -5,7 +5,6 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import jax
 import jax.numpy as jnp
 # load DNN library 
-#jax.random.PRNGKey(0)
 
 import math
 from tqdm.auto import tqdm
@@ -68,7 +67,7 @@ def main():
 
 
     tokenizer = CLIPTokenizer.from_pretrained(
-        config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="tokenizer"
+        config.training.pretrained_model_or_path, cache_dir=config.training.cache_dir, revision=config.training.revision, subfolder="tokenizer"
     )
 
     train_dataset, train_dataloader = get_dataset(config, tokenizer, interface="torch", accelerator=accelerator)
@@ -136,7 +135,6 @@ def main():
 
     # TODO (KLAUS): Add tunable paramter to SDE
     noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.min_sample_value, config.sde.module, config.sde.target, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
-
 # TRAIN
 
     global_step = 0

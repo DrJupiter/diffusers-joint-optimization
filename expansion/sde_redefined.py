@@ -44,7 +44,7 @@ class DRIFT:
             self.solution_matrix = jax.vmap(self.solution_matrix)
         
     def __repr__(self):
-        return str(self.drift)
+        return f"The drift is: {str(self.drift)}. The integral of the drift is {str(self.drift_int)}"
 
     def __call__(self, time, data) -> Any:
         if self.diagonal_form:
@@ -137,6 +137,7 @@ class DIFFUSION:
             self.decomposition = self.solution_matrix.applyfunc(sympy.sqrt)
             self.inv_decomposition = self.decomposition.applyfunc(lambda x: 1/x)
             self.inv_covariance = self.solution_matrix.applyfunc(lambda x: 1/x)
+        print(self.decomposition) 
         print(self.inv_decomposition) 
         self.diffusion_call = lambdify(variable, self.diffusion, module)
 
@@ -161,14 +162,16 @@ class DIFFUSION:
         return self.diffusion_call(time)        
 
     def __repr__(self):
-        return str(self.diffusion)
+        return f"The diffusion is: {str(self.diffusion)}, The resulting Covariance is {str(self.solution_matrix)}"
+
 class SDE:
     
     def __init__(self, variable, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
     
         self.drift = DRIFT(variable, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
         self.diffusion = DIFFUSION(variable, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
-
+        print(self.drift)
+        print(self.diffusion)
         # USED FOR GENERATING TIME STEPS
         self.initial_variable_value = initial_variable_value
         self.max_variable_value = max_variable_value

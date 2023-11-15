@@ -31,11 +31,13 @@ class DRIFT:
             assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
             # This check is not neccesary for diagonal matrices, as they will always commute.
         
-            self.solution_matrix = lambdify([variable, parameters], (self.drift_int-self.drift_int.limit(variable, initial_value)).exp(), module)
+            self.symbolic_solution_matrix =  (self.drift_int-self.drift_int.limit(variable, initial_value)).exp()
         else:
             # We can split up the exponential
             #self.solution_matrix = lambdify(variable, matrix_multiply_elementwise(self.drift_int.applyfunc(sympy.exp).transpose(),(-self.drift_int).applyfunc(sympy.exp).limit(variable,initial_value).transpose()), module)
-            self.solution_matrix = lambdify([variable,parameters], (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp), module)
+            self.symbolic_solution_matrix = (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp)
+
+        self.solution_matrix = lambdify([variable, parameters], self.symbolic_solution_matrix, module)
 
         self.drift_call = lambdify([variable,parameters], self.drift, module)
 
@@ -140,6 +142,7 @@ class DIFFUSION:
         
         self.diffusion_call = lambdify([variable, parameters], self.diffusion, module)
 
+        self.symbolic_decomposition = self.decomposition
         self.decomposition = lambdify([variable, parameters], self.decomposition, module)
 
         self.inv_decomposition = lambdify([variable, parameters], self.inv_decomposition, module)
@@ -163,10 +166,14 @@ class DIFFUSION:
     def __repr__(self):
         return str(self.diffusion)
 
-class SDE:
+class SDE_PARAM:
     
     def __init__(self, variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, initial_variable_value = 0., max_variable_value = math.inf, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
-    
+
+        self.variable = variable
+        self.drift_parameters = drift_parameters
+        self.diffusion_parameters = diffusion_parameters 
+
         self.drift = DRIFT(variable, drift_parameters, drift, initial_variable_value, module, drift_integral_form, drift_diagonal_form)
         self.diffusion = DIFFUSION(variable, diffusion_parameters, diffusion, diffusion_matrix, initial_variable_value, module, diffusion_integral_form, diffusion_integral_decomposition, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
 
@@ -174,6 +181,53 @@ class SDE:
         self.initial_variable_value = initial_variable_value
         self.max_variable_value = max_variable_value
         self.model_target = model_target
+
+        # batch_dim is one, because inputs will be vmapped or vectorized in another fashion.
+        self.batch_dim = 1
+        self.data_dim = sympy.symbols("data_dim", integer=True, nonnegative=True)
+        self.symbolic_input = sympy.MatrixSymbol("X", self.batch_dim, self.data_dim)
+
+        self.symbolic_noise = sympy.MatrixSymbol("z", self.batch_dim, self.data_dim)
+    
+    def symbolic_sample(self):
+        """
+        Sample a noisy datapoit using\\
+        x(t)=mu(t) + A(t) z_t  |  z_t \~ N(0,1)\\
+        which is the same as:\\
+        x(t) \~ N( mu(t),Sigma(t) )
+        """
+        
+
+        # TODO (KLAUS): CLASS SHOULD TAKE IN SAMPLE DIM? b, d
+        #z = jax.random.normal(subkey, initial_data.shape)
+
+        mean = self.symbolic_mean()
+
+        A = self.diffusion.symbolic_decomposition # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
+
+        if self.diffusion.diagonal_form:
+            decomposition_product = A.squeeze(1) * self.symbolic_noise
+        else:
+            decomposition_product = self.symbolic_noise @ A.T 
+
+        return mean + decomposition_product, self.symbolic_noise # x(t)=mu(t) + A(t) z_t, z_t
+
+    def symbolic_mean(self):
+        """
+        timestep \in R\\
+        initial_data \in R^(n)
+        """
+
+        exp_F = self.drift.symbolic_solution_matrix
+
+        if self.drift.diagonal_form:
+            mean = exp_F.squeeze(1) * self.symbolic_input
+        else:
+            mean = self.symbolic_input @ exp_F.T 
+
+        return mean
+    
+    
 
     def sample(self, timestep, drift_parameters, diffusion_parameters, initial_data, key):
         """
@@ -351,13 +405,13 @@ if __name__ == "__main__":
     diffusion_param = Matrix([x4,x5])
     print(drift_param[0])
 
-    v_drift_param =  jnp.array([[1.],[1.],[1.]])
-    v_diffusion_param =  jnp.array([[4.],[4.]])
+    v_drift_param =  jnp.array([1.,1.,1.])
+    v_diffusion_param =  jnp.array([4.,4.])
 
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1,1.5]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
+    timesteps = jnp.array([0.1, 0.15]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
 
-    n = 1 # dims of problem
+    n = 2 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))*1/2
 
@@ -369,33 +423,54 @@ if __name__ == "__main__":
     Q = Matrix.eye(n)
 
     # Normal test
-    sde = SDE(t, drift_param, diffusion_param, F, L, Q, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
+    sde.symbolic_mean()
+    symbolic_sample = sde.symbolic_sample()[0].subs({sde.data_dim: n})
+    print(symbolic_sample.shape)
+    #print(symbolic_sample)
+    #symbolic_sample = sympy.simplify(symbolic_sample)
+    ss = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  symbolic_sample, "jax")
+    print(sympy.simplify(symbolic_sample.diff(sde.drift_parameters)).doit().shape)
+    ss_derivate_drift = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  sympy.simplify(symbolic_sample.diff(sde.drift_parameters)).reshape(len(drift_param)), "jax")
+    import inspect
+    key2, subkey = jax.random.split(key)
+    z = jax.random.normal(subkey, x0.shape)
+    #print(ss(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    v_ss = jax.vmap(ss, (0,0, 0, None, None))
+    v_ss_drift = jax.vmap(ss_derivate_drift, (0,0, 0, None, None))
+    out_v = v_ss(timesteps, x0, z, v_drift_param, v_diffusion_param)
+    print(out_v)
+    
     normal_matrix = sde.sample(timesteps,v_drift_param, v_diffusion_param, x0, key)[0]
-    grad_sample = jax.jacobian(lambda t, drift_p, diff_p, data, key: sde.sample(t,drift_p,diff_p, data, key)[0], (1,2))
+    print(normal_matrix)
+    out_v_grad = v_ss_drift(timesteps, x0, z, v_drift_param, v_diffusion_param)
+    print(out_v_grad.shape)
+    grad_sample = jax.jacobian(lambda t, drift_p, diff_p, data, key: sde.sample(t,drift_p,diff_p, data, key), (1,2))
     grads = grad_sample(timesteps, v_drift_param, v_diffusion_param, x0, key)
-    print(jnp.squeeze(grads[0]))
+    print((grads[0]))
+    print(ss_derivate_drift(timesteps[0],x0[0], z[0], v_drift_param, v_diffusion_param).shape)
     
     import sys
     sys.exit(0)
     # Integral test
-    sde = SDE(t, F, L, Q, drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
+    sde = SDE_PARAM(t, F, L, Q, drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=False, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=False)
     integral_matrix = sde.sample(timesteps, x0, key)[0]
 
     # Diagonal tests
-    sde = SDE(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
+    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
     normal_vector = (sde.sample(timesteps, x0, key)[0])
     
     print((sde.sample(timesteps, jnp.ones((len(timesteps), 435580)), key)[0]).shape)
     #assert jnp.array_equal(normal_vector, custom_vector)
 
-    sde = SDE(t, F.diagonal(), L, Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=True)
+    sde = SDE_PARAM(t, F.diagonal(), L, Q.diagonal(), drift_diagonal_form=True, diffusion_diagonal_form=False, diffusion_matrix_diagonal_form=True)
     normal_diag_matrix_0 = sde.sample(timesteps, x0, key)[0]
 
-    sde = SDE(t, F.diagonal(), L.diagonal(), Q, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=False)
+    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=False)
     normal_diag_matrix_1 = sde.sample(timesteps, x0, key)[0]
 
     # Diagonal Integral tests
-    sde = SDE(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
+    sde = SDE_PARAM(t, F.diagonal(), L.diagonal(), Q.diagonal(), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
     integral_vector = sde.sample(timesteps, x0, key)[0]
     print(integral_matrix.device(), integral_vector.device())
     assert jnp.array_equal(normal_matrix, normal_vector)
