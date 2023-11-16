@@ -12,12 +12,19 @@ batch_matrix_vec = jax.vmap(lambda M, v: M @ v)
 """
 [B, N, K] @ [B, K]
 """
+from enum import Enum
+
+class SDEDimension(Enum):
+    SCALAR   = 0
+    DIAGONAL = 1
+    FULL     = 2
 
 class DRIFT:
     
-    def __init__(self, variable, parameters, drift, initial_value=0., module = 'jax', integral_form=False, diagonal=True):
+    def __init__(self, variable, parameters, drift, initial_value=0., module = 'jax', integral_form=False, diagonal=True, dimension=SDEDimension.SCALAR):
         
         self.diagonal_form = diagonal
+        self.dimension = dimension
 
         if integral_form:
             # if drift is given integral form
@@ -26,13 +33,14 @@ class DRIFT:
         else:
             self.drift = drift
             self.drift_int = sympy.integrate(drift,variable)
-            
-        if not diagonal:
+
+        if dimension == SDEDimension.FULL 
+        #if not diagonal:
             assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
             # This check is not neccesary for diagonal matrices, as they will always commute.
         
             self.symbolic_solution_matrix =  (self.drift_int-self.drift_int.limit(variable, initial_value)).exp()
-        else:
+        elif dimension == SDEDimension.SCALAR | dimension == SDEDimension.DIAGONAL:
             # We can split up the exponential
             #self.solution_matrix = lambdify(variable, matrix_multiply_elementwise(self.drift_int.applyfunc(sympy.exp).transpose(),(-self.drift_int).applyfunc(sympy.exp).limit(variable,initial_value).transpose()), module)
             self.symbolic_solution_matrix = (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp)
@@ -56,9 +64,11 @@ class DRIFT:
 
 class DIFFUSION:
     
-    def __init__(self, variable, parameters, diffusion, diffusion_matrix=None, initial_value=0., module='jax', integral_form=False, integral_decomposition='cholesky', diagonal=True, diagonal_diffusion=True):
+    def __init__(self, variable, parameters, diffusion, diffusion_matrix=None, initial_value=0., module='jax', integral_form=False, integral_decomposition='cholesky', diagonal=True, diagonal_diffusion=True, diffusion_dimension=SDEDimension.SCALAR, diffusion_matrix_dimension=SDEDimension.SCALAR):
     
         self.diagonal_form = diagonal and diagonal_diffusion
+        self.diffusion_dimension = diffusion_dimension
+        self.diffusion_matrix_dimension = diffusion_matrix_dimension
 
         if integral_form:
             
@@ -68,20 +78,22 @@ class DIFFUSION:
             self.diffusion_int = diffusion
             diffusion_term = sympy.diff(self.diffusion_int, variable)
             if integral_decomposition == 'cholesky':
-                
-                if not diagonal:
+
+                if diffusion_dimension == SDEDimension.FULL:
+                #if not diagonal:
                     self.diffusion = diffusion_term.cholesky()
                     self.diffusion_matrix = Matrix.eye(self.diffusion.shape[0])
-                else:
+                elif diffusion_dimension == SDEDimension.SCALAR | diffusion_dimension == SDEDimension.DIAGONAL:
                     self.diffusion = diffusion_term.applyfunc(sympy.sqrt)
                     # TODO: ADD CHECK TO SEE IF THE SOLUTION IS VALID
                     self.diffusion_matrix = sympy.ones(*self.diffusion.shape)
                     
             elif integral_decomposition == 'ldl':
-                if not diagonal:
+                if diffusion_dimension == SDEDimension.FULL:
+                #if not diagonal:
                     self.diffusion, self.diffusion_matrix = diffusion_term.LDLdecomposition()
                     assert self.diffusion_matrix.diff(variable).is_zero_matrix, f"The diffusion matrix must not be dependent on {variable}"
-                else:
+                elif diffusion_dimension == SDEDimension.SCALAR | diffusion_dimension == SDEDimension.DIAGONAL:
                     print("TODO: LDL composition is not implemented for the diagonal form\n Performing cholesky decomposition instead")
                     
                     # TODO: ADD CHECK TO SEE IF THE SOLUTION IS VALID
@@ -106,29 +118,47 @@ class DIFFUSION:
             # and pass them as a vector with diagonal=True, diagonal_diffusion=True
             def matrix_diagonal_product(matrix, diagonal):
                 return Matrix(list(map(lambda x: x[0] * x[1], zip([matrix[:,i] for i in range(matrix.shape[0])],diagonal)))).reshape(*matrix.shape).transpose()
-                
-            if not diagonal and not diagonal_diffusion:
-                self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
             
-            elif diagonal and diagonal_diffusion:
+            if diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.FULL: 
+            #if not diagonal and not diagonal_diffusion:
+                self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
+
+            elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:
+            #elif diagonal and diagonal_diffusion:
                 self.diffusion_int = sympy.integrate(matrix_multiply_elementwise(self.diffusion, matrix_multiply_elementwise(self.diffusion_matrix, self.diffusion)), variable)
             
             
-                
-            elif not diagonal and diagonal_diffusion:
+            elif diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:    
+            #elif not diagonal and diagonal_diffusion:
                 
                 self.diffusion_int = sympy.integrate(matrix_diagonal_product(self.diffusion, self.diffusion_matrix) @ self.diffusion.transpose(), variable)
                 
                 
-            elif diagonal and not diagonal_diffusion:
+            elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.FULL:    
+            #elif diagonal and not diagonal_diffusion:
                 
                 self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
+
+            # TODO (KLAUS) : TEST THIS HANDLES ALL CASES CORRECTLY
+            elif diffusion_dimension == SDEDimension.SCALAR:
+
+                self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
+
+            elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.FULL:
+
+                self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
+            
+            elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.DIAGONAL:
+
+                self.diffusion_int = sympy.integrate(self.diffusion_matrix * sympy.HadamardProduct((self.diffusion ,  self.diffusion.T)), variable) 
+            # TODO (KLAUS) : HANDLE SDEDIMENSION.SCALAR
 
         # TODO (KLAUS) : SEE IF POSSIBLE TO REIMPLEMENT LIMIT, CAUSES PROBLEMS WITH MAX AND MIN FUNCTIONS ON SERIES                
         #self.solution_matrix = (self.diffusion_int-self.diffusion_int.limit(variable, initial_value, '+'))
         self.solution_matrix = (self.diffusion_int-self.diffusion_int.subs(variable, initial_value))
-        
-        if not self.diagonal_form:
+
+        if diffusion_dimension == SDEDimension.FULL or diffusion_matrix_dimension == SDEDimension.FULL: 
+        #if not self.diagonal_form:
             
             # TODO: ADD CHECK TO SEE IF THE SOLUTION IS VALID
             self.decomposition = self.solution_matrix.cholesky()
@@ -247,6 +277,14 @@ class SDE_PARAM:
 
         A = self.diffusion.symbolic_decomposition # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
 
+        # TODO (KLAUS) : BRING THIS REFACTOR TO LIFE 
+        if self.diffusion.dim == SDEDimension.SCALAR:
+            decomposition_product = A * self.symbolic_noise
+        elif self.diffusion.dim == SDEDimension.DIAGONAL:
+            decomposition_product = sympy.HadamardProduct(A, self.symbolic_noise)
+        elif self.diffusion.dim == SDEDimension.FULL:
+            decomposition_product = self.symbolic_noise @ A.T 
+
         if self.diffusion.diagonal_form:
             #decomposition_product = A * self.symbolic_noise
             decomposition_product = sympy.HadamardProduct(A, self.symbolic_noise)
@@ -263,9 +301,11 @@ class SDE_PARAM:
 
         exp_F = self.drift.symbolic_solution_matrix
 
-        if self.drift.diagonal_form:
+        if self.drift.dim == SDEDimension.SCALAR:
+            mean = exp_F * self.symbolic_input 
+        elif self.drift.dim == SDEDimension.DIAGONAL:
             mean = sympy.HadamardProduct(exp_F, self.symbolic_input)
-        else:
+        elif self.drift_dim == SDEDimension.FULL:
             mean = self.symbolic_input @ exp_F.T 
 
         return mean
@@ -457,17 +497,19 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     timesteps = jnp.array([0.1,0.4]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
 
-    n = 3 # dims of problem
+    n = 1 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))*1/2
+    key2, subkey = jax.random.split(key)
+    z = jax.random.normal(subkey, x0.shape)
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
 
-    #F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    #L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
-    F = Matrix.diag([[sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]],[t*drift_param[2]], [t]])
-    L = Matrix.diag([[sympy.sin(t)*diffusion_param[0]+diffusion_param[1]],[t * diffusion_param[1] ], [t]])
+    F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
+    #F = Matrix.diag([[sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]],[t*drift_param[2]], [t]])
+    #L = Matrix.diag([[sympy.sin(t)*diffusion_param[0]+diffusion_param[1]],[t * diffusion_param[1] ], [t]])
     #F = Matrix.diag([t]*n)
     #L = Matrix.diag([t]*n)
     Q = Matrix.eye(n)
@@ -481,8 +523,6 @@ if __name__ == "__main__":
     #ss = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  symbolic_sample, "jax")
     #ss_derivate_drift = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  sympy.simplify(symbolic_sample.diff(sde.drift_parameters)), "jax")
     #num_ss_derivate_drift = lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T
-    key2, subkey = jax.random.split(key)
-    z = jax.random.normal(subkey, x0.shape)
     #print(ss(timesteps, x0, z, v_drift_param, v_diffusion_param))
     #v_ss = jax.vmap(ss, (0,0, 0, None, None))
     #v_ss_drift = jax.vmap(lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T, (0,0, 0, None, None))

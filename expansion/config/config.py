@@ -84,20 +84,16 @@ class OptimizerConfig:
 
     max_grad_norm = 1.0
 
-from enum import Enum
 
-class SDEType(Enum):
-    SCALAR   = 0
-    DIAGONAL = 1
-    FULL     = 2
+from sde_redefined_param import SDEDimension
 
 @dataclass
 class SDEConfig:
     name = "Custom"
     variable = Symbol('t', nonnegative=True, real=True)
 
-    drift_type = SDEType.SCALAR 
-    diffusion_type = SDEType.SCALAR
+    drift_type = SDEDimension.SCALAR 
+    diffusion_type = SDEDimension.SCALAR
     
     n = 1 # n = 1 -> a scalar matrix
     
@@ -138,16 +134,16 @@ class Config:
 
 
     # SANITY CHECKS for the SDE
-    if sde.drift_type == SDEType.SCALAR:
+    if sde.drift_type == SDEDimension.SCALAR:
         assert sde.drift.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    elif sde.drift_type == SDEType.DIAGONAL:
+    elif sde.drift_type == SDEDimension.DIAGONAL:
         assert sde.drift.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    elif sde.drift_type == SDEType.FULL:
+    elif sde.drift_type == SDEDimension.FULL:
         assert sde.drift.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
     
-    if sde.diffusion_type == SDEType.SCALAR:
+    if sde.diffusion_type == SDEDimension.SCALAR:
         assert sde.diffusion.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    elif sde.diffusion_type == SDEType.DIAGONAL:
+    elif sde.diffusion_type == SDEDimension.DIAGONAL:
         assert sde.diffusion.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    elif sde.diffusion_type == SDEType.FULL:
+    elif sde.diffusion_type == SDEDimension.FULL:
         assert sde.diffusion.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
