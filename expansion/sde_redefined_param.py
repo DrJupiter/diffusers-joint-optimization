@@ -34,7 +34,7 @@ class DRIFT:
             self.drift = drift
             self.drift_int = sympy.integrate(drift,variable)
 
-        if dimension == SDEDimension.FULL 
+        if dimension == SDEDimension.FULL: 
         #if not diagonal:
             assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
             # This check is not neccesary for diagonal matrices, as they will always commute.
@@ -118,39 +118,65 @@ class DIFFUSION:
             # and pass them as a vector with diagonal=True, diagonal_diffusion=True
             def matrix_diagonal_product(matrix, diagonal):
                 return Matrix(list(map(lambda x: x[0] * x[1], zip([matrix[:,i] for i in range(matrix.shape[0])],diagonal)))).reshape(*matrix.shape).transpose()
-            
-            if diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.FULL: 
-            #if not diagonal and not diagonal_diffusion:
-                self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
 
-            elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:
-            #elif diagonal and diagonal_diffusion:
-                self.diffusion_int = sympy.integrate(matrix_multiply_elementwise(self.diffusion, matrix_multiply_elementwise(self.diffusion_matrix, self.diffusion)), variable)
-            
-            
-            elif diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:    
-            #elif not diagonal and diagonal_diffusion:
+            match (diffusion_dimension, diffusion_matrix_dimension):
+
+                case (SDEDimension.FULL, SDEDimension.FULL):
+                    self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
                 
-                self.diffusion_int = sympy.integrate(matrix_diagonal_product(self.diffusion, self.diffusion_matrix) @ self.diffusion.transpose(), variable)
+                case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
+                    self.diffusion_int = sympy.integrate(matrix_multiply_elementwise(self.diffusion, matrix_multiply_elementwise(self.diffusion_matrix, self.diffusion)), variable)
+
+                case (SDEDimension.FULL, SDEDimension.DIAGONAL):
+                    self.diffusion_int = sympy.integrate(matrix_diagonal_product(self.diffusion, self.diffusion_matrix) @ self.diffusion.transpose(), variable)
                 
+                case (SDEDimension.DIAGONAL, SDEDimension.FULL):
+                    self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
+
+                case (SDEDimension.SCALAR, _):
+                    self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
                 
-            elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.FULL:    
-            #elif diagonal and not diagonal_diffusion:
+                case (SDEDimension.FULL, SDEDimension.SCALAR):
+                    self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
                 
-                self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
+                case (SDEDimension.DIAGONAL, SDEDimension.SCALAR):
+                    self.diffusion_int = sympy.integrate(self.diffusion_matrix * sympy.HadamardProduct((self.diffusion ,  self.diffusion.T)), variable) 
 
-            # TODO (KLAUS) : TEST THIS HANDLES ALL CASES CORRECTLY
-            elif diffusion_dimension == SDEDimension.SCALAR:
+                case (SDEDimension.SCALAR, SDEDimension.SCALAR):
+                    self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion, variable)
 
-                self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
+           # if diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.FULL: 
+           # #if not diagonal and not diagonal_diffusion:
+           #     self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
 
-            elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.FULL:
+           # elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:
+           # #elif diagonal and diagonal_diffusion:
+           #     self.diffusion_int = sympy.integrate(matrix_multiply_elementwise(self.diffusion, matrix_multiply_elementwise(self.diffusion_matrix, self.diffusion)), variable)
+           # 
+           # 
+           # elif diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:    
+           # #elif not diagonal and diagonal_diffusion:
+           #     
+           #     self.diffusion_int = sympy.integrate(matrix_diagonal_product(self.diffusion, self.diffusion_matrix) @ self.diffusion.transpose(), variable)
+           #     
+           #     
+           # elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.FULL:    
+           # #elif diagonal and not diagonal_diffusion:
+           #     
+           #     self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
 
-                self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
-            
-            elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.DIAGONAL:
+           # # TODO (KLAUS) : TEST THIS HANDLES ALL CASES CORRECTLY
+           # elif diffusion_dimension == SDEDimension.SCALAR:
 
-                self.diffusion_int = sympy.integrate(self.diffusion_matrix * sympy.HadamardProduct((self.diffusion ,  self.diffusion.T)), variable) 
+           #     self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
+
+           # elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.FULL:
+
+           #     self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
+           # 
+           # elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.DIAGONAL:
+
+           #     self.diffusion_int = sympy.integrate(self.diffusion_matrix * sympy.HadamardProduct((self.diffusion ,  self.diffusion.T)), variable) 
             # TODO (KLAUS) : HANDLE SDEDIMENSION.SCALAR
 
         # TODO (KLAUS) : SEE IF POSSIBLE TO REIMPLEMENT LIMIT, CAUSES PROBLEMS WITH MAX AND MIN FUNCTIONS ON SERIES                
