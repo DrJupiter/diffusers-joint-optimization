@@ -92,9 +92,9 @@ class SDEConfig:
     name = "Custom"
     variable = Symbol('t', nonnegative=True, real=True)
 
-    drift_type = SDEDimension.SCALAR 
-    diffusion_type = SDEDimension.SCALAR
-    
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
     n = 1 # n = 1 -> a scalar matrix
     
     drift = Matrix.diag([-100*variable**2]*n).diagonal()
@@ -112,9 +112,7 @@ class SDEConfig:
     diffusion_integral_form=True
     diffusion_integral_decomposition = 'cholesky' # ldl
 
-    drift_diagonal_form=True
-    diffusion_diagonal_form=True
-    diffusion_matrix_diagonal_form=True
+
 
     target = "epsilon" # x0
 

@@ -204,6 +204,7 @@ class DIFFUSION:
         self.symbolic_decomposition = self.decomposition
         self.decomposition = lambdify([variable, parameters], self.decomposition, module)
 
+        self.symbolic_inv_decomposition = self.inv_decomposition
         self.inv_decomposition = lambdify([variable, parameters], self.inv_decomposition, module)
 
         # If Sigma(0) != 0, this method has to be constructed in the SDE
@@ -250,6 +251,7 @@ class SDE_PARAM:
 
         self.symbolic_noise = sympy.MatrixSymbol("z", self.batch_dim, self.data_dim)
 
+        self.symbolic_model = sympy.MatrixSymbol("s", self.batch_dim, self.data_dim)
 
     def lambdify_symbolic_functions(self, data_dimension):
         """
@@ -350,40 +352,6 @@ class SDE_PARAM:
         return mean
       
 
-    def sample(self, timestep, drift_parameters, diffusion_parameters, initial_data, key):
-        """
-        Sample a noisy datapoit using
-        x(t)=mu(t) + A(t) z_t  z_t N(0,1)
-        which is the same as
-        x(t) N( mu(t),Sigma(t) )
-        """
-        
-        key, subkey = jax.random.split(key)
-        
-        z = jax.random.normal(subkey, initial_data.shape)
-
-        mean = self.mean(timestep, drift_parameters, initial_data)
-
-        A = self.diffusion.decomposition(timestep, diffusion_parameters) # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
-
-        
-        decomposition_product = batch_matrix_vec(A, z) 
-
-        return mean + decomposition_product, z # x(t)=mu(t) + A(t) z_t, z_t
-
-    def mean(self, timestep, drift_parameters, initial_data):
-        """
-        timestep  R
-        initial_data R^(n)
-        """
-
-        exp_F = self.drift.solution_matrix(timestep, drift_parameters)
-
-        
-        mean = batch_matrix_vec(exp_F, initial_data)
-
-        return mean
-
     def score(self, timestep, drift_parameters, diffusion_parameters, initial_data, data):
         """
         Returns the score:   Σ^(-1)(t) (x(t)-μ(t))
@@ -392,6 +360,31 @@ class SDE_PARAM:
             return -self.diffusion.inv_covariance(timestep, diffusion_parameters) * (data-self.mean(timestep, drift_parameters, initial_data))
         else:
             return -self.diffusion.inv_covariance(timestep, diffusion_parameters) @ (data-self.mean(timestep, drift_parameters, initial_data))
+#t, data, noise, drift, diffusion
+    def symbolic_reverse_time_derivative(self):
+
+        if self.model_target == "epsilon":
+            match self.diffusion.diffusion_dimension:
+                case SDEDimension.FULL:
+                    score = - self.diffusion.symbolic_inv_decomposition @ self.symbolic_model
+                case SDEDimension.DIAGONAL:
+                    score = - sympy.HadamardProduct(self.diffusion.symbolic_inv_decomposition, self.symbolic_model)
+                case SDEDimension.SCALAR:
+                    score = - self.diffusion.symbolic_inv_decomposition * self.symbolic_model
+        elif self.model_target == "score":
+            score = self.symbolic_model
+        else:
+            raise ValueError(f"Unable to calculate score based on Model Target {self.model_target}")
+
+        match self.diffusion.diffusion_dimension:
+            case SDEDimension.FULL:
+                diffusion_term = - self.diffusion.diffusion @ self.diffusion.diffusion.T @ score + self.diffusion.diffusion @ self.symbolic_noise
+            case SDEDimension.DIAGONAL:
+                diffusion_term = - sympy.HadamardProduct(sympy.HadamardProduct(self.diffusion.diffusion, self.diffusion.diffusion), score) + sympy.HadamardProduct(self.diffusion.diffusion, self.symbolic_noise) 
+            case SDEDimension.SCALAR:
+                diffusion_term = - self.diffusion.diffusion * self.diffusion.diffusion * score + self.diffusion.diffusion * self.symbolic_noise
+
+        return self.symbolic_mean() + diffusion_term 
 
     def reverse_time_derivative(self, noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, key):
         """
@@ -540,7 +533,12 @@ if __name__ == "__main__":
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
     F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n)
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) # n x n, but to use as diagonal then do 1 x n, 1 x 1 
+    
+    drift_dimension = SDEDimension.FULL
+    drift_dimension = SDEDimension.DIAGONAL
+    drift_dimension = SDEDimension.SCALAR
+
     #F = Matrix.diag([[sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]],[t*drift_param[2]], [t]])
     #L = Matrix.diag([[sympy.sin(t)*diffusion_param[0]+diffusion_param[1]],[t * diffusion_param[1] ], [t]])
     #F = Matrix.diag([t]*n)
