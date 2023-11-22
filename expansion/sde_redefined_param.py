@@ -261,11 +261,14 @@ class SDE_PARAM:
 
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
+        symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
+
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
         symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
+        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
 
         # SAMPLE
-        lambdified_sample = lambdify([self.variable, self.symbolic_input.subs({self.data_dim:data_dimension}),self.symbolic_noise.subs({self.data_dim:data_dimension}), self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
+        lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
 
         # DERIVATIVE OF SAMPLE W.R.T DRIFT AND DIFFUSION 
         drift_derivative = symbolic_sample.diff(self.drift_parameters)
@@ -274,23 +277,30 @@ class SDE_PARAM:
         lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module)
         lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module)
 
+        # REVERSE TIME DERIVATIVE
+        lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module)
+
         # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
         if self.module == "jax":
             self.lambdified_drift_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_drift_derivative(t, data, noise, drift, diffusion)).T 
             self.lambdified_diffusion_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_diffusion_derivative(t, data, noise, drift, diffusion)).T 
             self.lambdified_sample = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_sample(t, data, noise, drift, diffusion))
+            self.lambdified_reverse_time_derivative = lambda t, data, noise, model, drift, diffusion: jnp.squeeze(lambdified_reverse_time_derivative(t, data, noise, model, drift, diffusion))
 
         else:
             self.lambdified_drift_derivative = lambdified_drift_derivative
             self.lambdified_diffusion_derivative = lambdified_diffusion_derivative
-
             print("derivatives haven't been converted to numerator layout. Consider if this is relevant for your use case. Otherwise squeeze and transpose the output to achieve this.")
+
+            self.lambdified_reverse_time_derivative = lambdified_reverse_time_derivative
+
 
         if self.module == "jax":
             # TODO (KLAUS): HOPEFULLY WE CAN JUST USE THIS IN THE TORCH CASE, WE HAVE TO CHECK IF IT WILL ALLOW US TO LAMBIDIFY
             self.v_lambdified_sample = jax.vmap(self.lambdified_sample, (0, 0, 0, None, None)) 
             self.v_lambdified_drift_derivative = jax.vmap(self.lambdified_drift_derivative, (0, 0, 0, None, None))
             self.v_lambdified_diffusion_derivative = jax.vmap(self.lambdified_diffusion_derivative, (0, 0, 0, None, None))
+            self.v_lambdified_reverse_time_derivative = jax.vmap(self.lambdified_reverse_time_derivative, (0, 0, 0, 0, None, None))
     
     def symbolic_sample(self):
         """
@@ -364,12 +374,12 @@ class SDE_PARAM:
     def symbolic_reverse_time_derivative(self):
 
         if self.model_target == "epsilon":
-            match self.diffusion.diffusion_dimension:
-                case SDEDimension.FULL:
-                    score = - self.diffusion.symbolic_inv_decomposition @ self.symbolic_model
-                case SDEDimension.DIAGONAL:
+            match (self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
+                case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
+                    score = -  self.symbolic_model @ self.diffusion.symbolic_inv_decomposition.T
+                case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
                     score = - sympy.HadamardProduct(self.diffusion.symbolic_inv_decomposition, self.symbolic_model)
-                case SDEDimension.SCALAR:
+                case (SDEDimension.SCALAR, SDEDimension.SCALAR):
                     score = - self.diffusion.symbolic_inv_decomposition * self.symbolic_model
         elif self.model_target == "score":
             score = self.symbolic_model
@@ -378,7 +388,7 @@ class SDE_PARAM:
 
         match self.diffusion.diffusion_dimension:
             case SDEDimension.FULL:
-                diffusion_term = - self.diffusion.diffusion @ self.diffusion.diffusion.T @ score + self.diffusion.diffusion @ self.symbolic_noise
+                diffusion_term = - score @ self.diffusion.diffusion @ self.diffusion.diffusion.T  + self.symbolic_noise @ self.diffusion.diffusion.T
             case SDEDimension.DIAGONAL:
                 diffusion_term = - sympy.HadamardProduct(sympy.HadamardProduct(self.diffusion.diffusion, self.diffusion.diffusion), score) + sympy.HadamardProduct(self.diffusion.diffusion, self.symbolic_noise) 
             case SDEDimension.SCALAR:
@@ -386,59 +396,6 @@ class SDE_PARAM:
 
         return self.symbolic_mean() + diffusion_term 
 
-    def reverse_time_derivative(self, noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, key):
-        """
-        Evaluate dx/dt at noisy_data,t\\
-        TODO: Talk to klaus about the correctness of this (should be resolved)\\
-        TODO: better name?
-        """
-
-        # generate random noise
-        noise = jax.random.normal(key, noisy_data.shape) # TODO: ask klaus if each function eval should use a new random noise, or the same, it currently uses the same. Answer: Yes, they should
-
-        # Find mean of noisy data at timestep t
-        Fx = self.mean(timestep, drift_parameters, noisy_data) 
-
-        # Find diffusion at timestep t
-        L = self.diffusion(timestep, diffusion_parameters)
-
-        # Finds core at timestep t based on the intial data and the noisy data
-        if self.model_target == "epsilon":
-            if self.diffusion.diagonal_form:
-                score = - self.diffusion.inv_decomposition(timestep, diffusion_parameters).squeeze(1) * model_output
-            else:
-                score = -self.diffusion.inv_decomposition(timestep, diffusion_parameters) @ model_output
-
-        elif self.model_target == "score":
-            score = model_output
-
-        else:
-            raise ValueError(f"Unable to calculate score based on Model Target {self.model_target}")
-
-        # use correct form baed on if its a digagonal form or a filled matrix
-        if self.diffusion.diagonal_form: # diagonal
-            L = L.squeeze(1)
-            diffusion_term = - L * L * score + L * noise
-        else: # filled
-            diffusion_term = - L @ L.T @ score + L @ noise
-
-        # F(t) x(t) +  ( L(t) L(t) score + L(t)*noise )
-        dxdt = Fx + diffusion_term 
-
-        #print(f"{L=}, {score=},{self.diffusion.inv_decomposition(t)=}")
-        # Our SDE: dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
-
-        # Yang Song dx = [ f(x,t)-g^2 score ] dt + g(t) dw
-        # what he does:
-        # prev_sample = sample - drift + diffusion**2 * model_output + diffusion * noise
-        # f(x,t) = -drift
-        # g(t) = diffusion
-        # dw = noise
-        
-        # sample is x in x+h*f in Euler
-        # the h from Euler comes through the diffusion part i think, im not certain
-
-        return dxdt
 
     def step(self, model_output, timestep, drift_parameters, diffusion_parameters, noisy_data, key, dt):
         """
@@ -508,6 +465,7 @@ if __name__ == "__main__":
 
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
+    sympy.init_printing(use_unicode=True, use_latex=True)
     t = Symbol('t', nonnegative=True, real=True)
     drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
@@ -530,6 +488,8 @@ if __name__ == "__main__":
     key2, subkey = jax.random.split(key)
     z = jax.random.normal(subkey, x0.shape)
 
+    model_output = jnp.ones_like(x0)
+
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
     F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
@@ -550,11 +510,14 @@ if __name__ == "__main__":
     integral_outputs = []
 
     diffusion_derivatives = []
-    drift_derivatives = []
-
     integral_diffusion_derivatives = []
+
+    drift_derivatives = []
     integral_drift_derivatives = []
-    
+
+    reverse_time_derivatives = [] 
+    integral_reverse_time_derivatives = [] 
+
 
     sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
     sde.lambdify_symbolic_functions(n)
@@ -571,6 +534,7 @@ if __name__ == "__main__":
     outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
     #out_v_grad = v_ss_drift(timesteps, x0, z, v_drift_param, v_diffusion_param)
     #print(out_v_grad)
     
@@ -581,6 +545,7 @@ if __name__ == "__main__":
     integral_outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     integral_diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     integral_drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    integral_reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
     # Diagonal tests
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q.diagonal(), drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.DIAGONAL, diffusion_matrix_dimension=SDEDimension.DIAGONAL)
@@ -588,6 +553,7 @@ if __name__ == "__main__":
     outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
     
 
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L, Q.diagonal(),drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.DIAGONAL)
@@ -596,6 +562,7 @@ if __name__ == "__main__":
     outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
 
 
@@ -605,6 +572,7 @@ if __name__ == "__main__":
     outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
 
 
@@ -615,13 +583,17 @@ if __name__ == "__main__":
     integral_outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     integral_diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     integral_drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    integral_reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
+
     from test.utils import test_arrays_equal
     test_arrays_equal(outputs, "Regular") 
     test_arrays_equal(integral_outputs, "Integral") 
     test_arrays_equal(diffusion_derivatives, "Regular Diffusion Derivative") 
     test_arrays_equal(drift_derivatives, "Regular Drift Derivative") 
+    test_arrays_equal(reverse_time_derivatives, "Regular Reverse Time Derivative") 
     test_arrays_equal(integral_diffusion_derivatives, "Integral Diffusion Derivative") 
     test_arrays_equal(integral_drift_derivatives, "Integral Drift Derivative") 
+    test_arrays_equal(integral_reverse_time_derivatives, "Integral Reverse Time Derivative") 
 
 
 
@@ -637,12 +609,14 @@ if __name__ == "__main__":
 #    t1 = timeit.time.time()
 #    print(t1-t0)
 
-    model_out = jnp.ones((len(timesteps), n))
-    h = 0.05 # aka dt -- too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
-    prev_x, dxdt, key = sde.step(model_out, timesteps, v_drift_param, v_diffusion_param, noisy_data = x0, key=key, dt=h)
-    print(f"Step test shape = {prev_x.shape}")
 
-    model_out2 = jnp.ones((len(timesteps), n))*2
-    new_x, key = sde.step_correct(model_out2, timesteps, v_drift_param, v_diffusion_param, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
-    print(f"Step correct test shape = {new_x.shape}")
-    print("Step and Step correct tests run :)")
+
+    #model_out = jnp.ones((len(timesteps), n))
+    #h = 0.05 # aka dt -- too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
+    #prev_x, dxdt, key = sde.step(model_out, timesteps, v_drift_param, v_diffusion_param, noisy_data = x0, key=key, dt=h)
+    #print(f"Step test shape = {prev_x.shape}")
+
+    #model_out2 = jnp.ones((len(timesteps), n))*2
+    #new_x, key = sde.step_correct(model_out2, timesteps, v_drift_param, v_diffusion_param, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
+    #print(f"Step correct test shape = {new_x.shape}")
+    #print("Step and Step correct tests run :)")
