@@ -226,7 +226,7 @@ plt.show()
 # %%
 
 
-min(y_space),max(y_space)
+min(y_space), max(y_space)
 
 y_space[np.argmin(np.abs(y_space-1))] # cloest to 1
 
@@ -361,4 +361,98 @@ Lt = sp.Matrix(
     )
 
 Lt@Lt.T
+# %%
+
+
+import sympy as sp
+def from_01_to_m_inf_inf(x):
+    """applies a functino that maps from ]0;1[ to ]-\infty;\infty["""
+    return sp.ln(1/(1-x)) # -sp.ln(1/x-1)
+
+def from_m_inf_inf_to_0_m_inf(x):
+    """ applies a functino that maps from ]-\infty;\infty[ to ]0;-inf[ """
+    return -sp.exp(x)
+
+def polynomial(x,params):
+    """Crates a polynomial with degrees equal to param count -1"""
+    summ = 0
+    for i,param in enumerate(params):
+        summ += param*x**i
+    return summ
+
+def create_param_poly(var,degree,subname):
+    """Creates a parameterized function that maps t for ]0;1[ to ]0, -inf[ while letting the params be in unconstrained space"""
+    # Map from 01 to -inf inf
+    f1 = from_01_to_m_inf_inf(var)
+
+    # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
+    params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree-1)])+",1",real=True)
+
+    # map parameteierzed function to 0 -inf
+    f2 = from_m_inf_inf_to_0_m_inf(polynomial(f1,params))
+
+    return f2
+
+n = 3
+d = 3
+
+M = sp.Matrix([create_param_poly(var = t,degree = d,subname = i) for i in range(n)]).T
+M
+
+# %%
+M.subs(t,0.5).subs("p_01",1).evalf()
+# %%
+
+f1 = from_01_to_m_inf_inf(t)
+f2 = from_m_inf_inf_to_0_m_inf(polynomial(f1,[1,2]))
+
+f2.subs(t,0.99).evalf()
+# %%
+
+params = [1**2,2**2,3**2]
+
+
+A = sp.Matrix([
+    [1,-1,-1],
+    [-1,1,0],
+    [-1,0,1],
+])
+
+
+test3_covar_pos_definite(A)
+polynomial(t,params)
+
+
+# %%
+
+A.eigenvects()
+
+# %%
+sp.sqrt(485).evalf()
+# %%
+
+
+sp.symbols(" ".join([f"p_{i}" for i in range(3)]),real=True)**2
+# %%
+def polynomial(x,params):
+    """Crates a polynomial with degrees equal to param count"""
+    summ = 0
+    for i,param in enumerate(params):
+        summ += param*x**i
+    return summ
+
+
+def create_diffusion_param_func(var,degree,subname,func):
+    """Creates a parameterized function that maps t for ]0;1[ to ]0, -inf[ while letting the params be in unconstrained space"""
+    # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
+    params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree)]),real=True)
+
+    params = [param**2 for param in params]
+
+    # map parameteierzed function to 0 -inf
+    f2 = func(var,params)
+
+    return f2
+
+create_diffusion_param_func(t,4,0,polynomial)
 # %%

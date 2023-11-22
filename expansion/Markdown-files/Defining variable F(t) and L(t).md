@@ -71,7 +71,6 @@ we define $\hat F(t) = \int F(\tau) d\tau$
 
 As such we can write
 $\hat F(0)-\hat F(0)=0$
-
 This is always the case 
 
 
@@ -122,12 +121,6 @@ $\tan(x*pi/2)$
 $\cfrac{1}{x-1}$
 $\cfrac{x}{x-1}$
 $\cfrac{x}{\sqrt{x^2-1}}$
-
-## Bijective mapping of $[0,\infty[\rightarrow[0,-\infty[$
-
-Just hit it with the $-$
-
-$f(x)=-g(x)$
 
 ## Bijective map from $]0,1[ ~~\rightarrow ~~]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
 
@@ -312,9 +305,6 @@ This means polynomials consisting of multiple parts are a problem as they can ha
 - This would also result in the requirement being satisfied.
 
 
-
-
-
 #### Diagonal $L$
 
 In the case of a diagonal $L$ this is forced
@@ -340,7 +330,6 @@ It might be possible to force any matrix to be positive definite by multiplying 
 
 Or we can take all parameters squared in the math
 
-
 Again we have that n
 
 ### Form
@@ -361,7 +350,7 @@ Additionally we know that if $LL^T$ is positive definite, then $ALL^TA^T$ is as 
 Using this method we would define each entry in $L$ as a singular function
 The dot product with $A$ would then parameterize and distribute it.
 
-#### Full parameterization form
+#### Fully parameterized form
 
 This way each entry is a sum of function with their own parameters like:
 $A[0,0]=a*t^2+b*\sin(t)+c*e^t$
