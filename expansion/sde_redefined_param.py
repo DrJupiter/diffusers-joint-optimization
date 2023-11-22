@@ -1,8 +1,6 @@
 from typing import Any
 import jax
 from jax import numpy as jnp
-import numpy as np
-import matplotlib.pyplot as plt
 import sympy
 from sympy import Matrix, Symbol, lambdify, matrix_multiply_elementwise
 import math
@@ -301,7 +299,7 @@ class SDE_PARAM:
             self.v_lambdified_drift_derivative = jax.vmap(self.lambdified_drift_derivative, (0, 0, 0, None, None))
             self.v_lambdified_diffusion_derivative = jax.vmap(self.lambdified_diffusion_derivative, (0, 0, 0, None, None))
             self.v_lambdified_reverse_time_derivative = jax.vmap(self.lambdified_reverse_time_derivative, (0, 0, 0, 0, None, None))
-    
+
     def symbolic_sample(self):
         """
         Sample a noisy datapoit using
@@ -309,16 +307,11 @@ class SDE_PARAM:
         which is the same as:
         x(t) N( mu(t),Sigma(t) )
         """
-        
-
-        # TODO (KLAUS): CLASS SHOULD TAKE IN SAMPLE DIM? b, d
-        #z = jax.random.normal(subkey, initial_data.shape)
 
         mean = self.symbolic_mean()
 
         A = self.diffusion.symbolic_decomposition # decompose Sigma into A: Sigma(t)=A(t)@A(t).T
 
-        # TODO (KLAUS) : BRING THIS REFACTOR TO LIFE 
         match (self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
             case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
                 decomposition_product = self.symbolic_noise @ A.T 
@@ -328,20 +321,7 @@ class SDE_PARAM:
                 decomposition_product = A * self.symbolic_noise
 
 
-        #if self.diffusion.dim == SDEDimension.SCALAR:
-        #    decomposition_product = A * self.symbolic_noise
-        #elif self.diffusion.dim == SDEDimension.DIAGONAL:
-        #    decomposition_product = sympy.HadamardProduct(A, self.symbolic_noise)
-        #elif self.diffusion.dim == SDEDimension.FULL:
-        #    decomposition_product = self.symbolic_noise @ A.T 
-
-        #if self.diffusion.diagonal_form:
-        #    #decomposition_product = A * self.symbolic_noise
-        #    decomposition_product = sympy.HadamardProduct(A, self.symbolic_noise)
-        #else:
-        #    decomposition_product = self.symbolic_noise @ A.T 
-
-        return mean + decomposition_product # x(t)=mu(t) + A(t) z_t, z_t
+        return mean + decomposition_product 
 
     def symbolic_mean(self):
         """
@@ -396,23 +376,25 @@ class SDE_PARAM:
 
         return self.symbolic_mean() + diffusion_term 
 
+    def step(self, data, reverse_time_derivative, dt):
+        return data + dt * reverse_time_derivative
 
-    def step(self, model_output, timestep, drift_parameters, diffusion_parameters, noisy_data, key, dt):
-        """
-        Remove noise from image using the reverse SDE
-        dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
-        """
-        key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
-        
-
-        # evaluate reverse SDE in the current datapoint and timestep
-        dxdt = self.reverse_time_derivative(noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, noise_key)
-
-        ### Euler ###
-        dx = dt*dxdt # h*f(t,x)
-        euler_data = noisy_data + dx # x + h*f(t,x)
-
-        return euler_data, dxdt, key
+#    def step(self, model_output, timestep, drift_parameters, diffusion_parameters, noisy_data, key, dt):
+#        """
+#        Remove noise from image using the reverse SDE
+#        dx(t) = [ F(t)x(t) - L(t)L(t)^T score ] dt + L(t) db(t)
+#        """
+#        key, noise_key = jax.random.split(key) # IDEA: TRY SEMI DETERMINISTIC KEYING VS RANDOM
+#        
+#
+#        # evaluate reverse SDE in the current datapoint and timestep
+#        dxdt = self.reverse_time_derivative(noisy_data, model_output, drift_parameters, diffusion_parameters, timestep, noise_key)
+#
+#        ### Euler ###
+#        dx = dt*dxdt # h*f(t,x)
+#        euler_data = noisy_data + dx # x + h*f(t,x)
+#
+#        return euler_data, dxdt, key
 
     def step_correct(self, model_output_euler_data, timestep, drift_parameters, diffusion_parameters, noisy_data, euler_data, dxdt, key, dt):
         """
