@@ -434,6 +434,16 @@ sp.sqrt(485).evalf()
 
 sp.symbols(" ".join([f"p_{i}" for i in range(3)]),real=True)**2
 # %%
+import sympy as sp
+
+def from_01_to_m_inf_inf(x):
+    """applies a functino that maps from ]0;1[ to ]-\infty;\infty["""
+    return -sp.ln(1/x-1)
+
+def from_m_inf_inf_to_0_m_inf(x):
+    """ applies a functino that maps from ]-\infty;\infty[ to ]0;-inf[ """
+    return -sp.exp(x)
+
 def polynomial(x,params):
     """Crates a polynomial with degrees equal to param count"""
     summ = 0
@@ -441,18 +451,80 @@ def polynomial(x,params):
         summ += param*x**i
     return summ
 
+def create_drift_param_func(var,degree,subname,func):
+    """Creates a parameterized function that maps t for ]0;1[ to ]0, -inf[ while letting the params be in unconstrained space"""
+    # Map from 01 to -inf inf
+    f1 = from_01_to_m_inf_inf(var)
+
+    # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
+    params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree-1)])+",1",real=True)
+
+    # map parameteierzed function to 0 -inf
+    f2 = from_m_inf_inf_to_0_m_inf(func(f1,params))
+
+    return f2, params
 
 def create_diffusion_param_func(var,degree,subname,func):
-    """Creates a parameterized function that maps t for ]0;1[ to ]0, -inf[ while letting the params be in unconstrained space"""
+    """Creates a parameterized function that is always positive and with a positive derivative"""
     # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
     params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree)]),real=True)
 
+    # square paramterers, to ensure that we have a positive function
     params = [param**2 for param in params]
 
     # map parameteierzed function to 0 -inf
     f2 = func(var,params)
 
-    return f2
+    return f2, params
 
-create_diffusion_param_func(t,4,0,polynomial)
+n=3
+poly_degree=3
+t = sp.symbols("t")
+
+drift = sp.diag(*[create_drift_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+diffusion = sp.diag(*[create_diffusion_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+
+#%%
+
+Sigma = sp.integrate((diffusion@sp.eye(n)@diffusion.T).expand(),(t,0,t))
+test3_covar_pos_definite(Sigma) # make it also take a list of variables and then the function should test if it overholds the things for all values of those variables.
+
+
 # %%
+
+test1_commuting_Ft(drift)
+
+# %%
+
+
+# %%
+
+def test2_2_mean_time(mu):
+    t0 = mu.limit(t,0) == sp.ones(mu.shape[0])[:,0]
+    t1 = mu.limit(t,1) == sp.zeros(mu.shape[0])[:,0]
+    
+    if not t0:
+        print(f"mu(0)={mu.limit(t,0)} not {sp.ones(mu.shape[0])[:,0]}")
+    if not t1:
+        print(f"mu(1))={mu.limit(t,1)} not {sp.zeros(mu.shape[0])[:,0]}")
+
+    if t1 and t0:
+        print("mu upholds the correct values at the t=0 and t=1")
+
+
+# define x0
+x0 = sp.ones(N)[:,0] # R^(N x 1)
+
+# calculate mu
+mu = drift.exp()@x0 # R^(N x 1)
+# test2_2_mean_time(mu)
+
+
+mu.limit(t,0,"-")
+
+#%%
+mu.subs(t,0.5)
+
+
+# %%
+test2_1_covar_time(Sigma)

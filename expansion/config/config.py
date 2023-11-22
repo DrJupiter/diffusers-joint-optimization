@@ -151,6 +151,7 @@ def create_diffusion_param_func(var,degree,subname,func):
     # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
     params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree)]),real=True)
 
+    # square paramterers, to ensure that we have a positive function
     params = [param**2 for param in params]
 
     # map parameteierzed function to 0 -inf
@@ -185,8 +186,6 @@ class SDEConfigParamerterized:
     drift_integral_form=True
     diffusion_integral_form=True
     diffusion_integral_decomposition = 'cholesky' # ldl
-
-
 
     target = "epsilon" # x0
 
