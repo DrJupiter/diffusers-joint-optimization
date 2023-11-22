@@ -164,11 +164,11 @@ $f(x) = a + b t_1 + c t_1^2 + d t_1^3 +t_1^4$
 ### Bijective map from $]-\infty,\infty[ ~~\rightarrow ~~]0,-\infty[$
 
 A function that does this is:
-$-e^x$
+$g(x)=-e^x$
 
-### Combined
+### Combined $]0,1[ ~~\rightarrow  ~~]0,-\infty[$
 
-$-e^{1-\ln(1/x-1)}$
+$g(f(x)) = -e^{1-\ln(1/x-1)}$
 
 $-e^{1-\ln(1/x-1)}=\cfrac{-e^1}{e^{\ln(1/x-1)}}=\cfrac{-e}{1/x-1}$
 $e^{\ln(1/x-1)}=1/x-1$
