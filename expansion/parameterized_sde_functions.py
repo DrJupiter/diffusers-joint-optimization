@@ -185,8 +185,8 @@ t1 = from_01_to_minfinf(t)
 
 
 a,b,c,d,t,x,z = sp.symbols("a,b,c,d,t,x,z",real=True)
-params = [a,b,c,d] # 3rd degree poly
-# params = [1,2,3,1]
+# params = [a,b,c,d] # 3rd degree poly
+params = [1,2,3,1]
 
 # Taylor of func
 def taylor_of_f(f,step,eval_point,x):
@@ -204,6 +204,9 @@ t2 = minfinf_to_0minf(polynomial(t1,params))
 t2
 
 #%%
+polynomial(t,params)
+
+#%%
 import numpy as np
 
 N = 100
@@ -215,7 +218,7 @@ y_space = np.array([-t2.subs(t,t_i).evalf() for t_i in linspace])
 
 
 plt.plot(linspace,y_space)
-# plt.yscale("log")
+plt.yscale("log")
 plt.ylabel("negative value (for log scale)")
 plt.xlabel("t in ]0,1[")
 plt.show()
