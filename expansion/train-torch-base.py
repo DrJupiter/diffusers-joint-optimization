@@ -177,9 +177,13 @@ def main():
                 #    (batch_size_z,),
                 #    device=clean_images.device
                 #).long()
-                key, subkey = jax.random.split(key)
+                #key, subkey = jax.random.split(key)
+                #noisy_images, z = noise_scheduler.sample(timesteps, clean_images, subkey, device=accelerator.device)
 
-                noisy_images, z = noise_scheduler.sample(timesteps, clean_images, subkey, device=accelerator.device)
+                noise = torch.randn_like(clean_images, device=clean_images.device)
+                # TODO (KLAUS): FIGURE OUT IF WE STORE THE PARAMTERS IN THE MODEL OR PASS THEM AROUND.
+                noisy_images = noise_scheduler.sample(timesteps, clean_images, noise, device=accelerator.device)
+
 #                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
 #                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
 #
@@ -194,7 +198,7 @@ def main():
 
 
                 if config.sde.target == "epsilon":
-                    target = z
+                    target = noise
                 else:
                     raise ValueError(f"Unknown prediction type {config.sde.target}")
 #                if noise_scheduler.config.prediction_type == "epsilon":

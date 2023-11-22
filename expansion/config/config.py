@@ -84,13 +84,17 @@ class OptimizerConfig:
 
     max_grad_norm = 1.0
 
-    
+
+from sde_redefined_param import SDEDimension
 
 @dataclass
 class SDEConfig:
     name = "Custom"
     variable = Symbol('t', nonnegative=True, real=True)
 
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
     n = 1 # n = 1 -> a scalar matrix
     
     drift = Matrix.diag([-100*variable**2]*n).diagonal()
@@ -108,11 +112,10 @@ class SDEConfig:
     diffusion_integral_form=True
     diffusion_integral_decomposition = 'cholesky' # ldl
 
-    drift_diagonal_form=True
-    diffusion_diagonal_form=True
-    diffusion_matrix_diagonal_form=True
+
 
     target = "epsilon" # x0
+
 
 
 
@@ -121,7 +124,24 @@ class Config:
     logging = WandbConfig()
     training = TrainingConfig()
     sde = SDEConfig()
+    sde.data_dim = training.resolution
 
     optimizer = OptimizerConfig()
     if optimizer.scale_lr:
         optimizer.learning_rate *= training.total_batch_size
+
+
+    # SANITY CHECKS for the SDE
+    if sde.drift_type == SDEDimension.SCALAR:
+        assert sde.drift.shape == (1,1), "A scalar drift must have dimensions (1,1)"
+    elif sde.drift_type == SDEDimension.DIAGONAL:
+        assert sde.drift.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
+    elif sde.drift_type == SDEDimension.FULL:
+        assert sde.drift.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
+    
+    if sde.diffusion_type == SDEDimension.SCALAR:
+        assert sde.diffusion.shape == (1,1), "A scalar drift must have dimensions (1,1)"
+    elif sde.diffusion_type == SDEDimension.DIAGONAL:
+        assert sde.diffusion.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
+    elif sde.diffusion_type == SDEDimension.FULL:
+        assert sde.diffusion.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
