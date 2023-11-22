@@ -3,6 +3,7 @@ import jax
 import torch
 from dataclasses import dataclass
 import sympy
+import sympy as sp
 from sympy import Matrix, Symbol 
 import math
 
@@ -117,6 +118,76 @@ class SDEConfig:
     target = "epsilon" # x0
 
 
+def from_01_to_m_inf_inf(x):
+    """applies a functino that maps from ]0;1[ to ]-\infty;\infty["""
+    return -sp.ln(1/x-1)
+
+def from_m_inf_inf_to_0_m_inf(x):
+    """ applies a functino that maps from ]-\infty;\infty[ to ]0;-inf[ """
+    return -sp.exp(x)
+
+def polynomial(x,params):
+    """Crates a polynomial with degrees equal to param count"""
+    summ = 0
+    for i,param in enumerate(params):
+        summ += param*x**i
+    return summ
+
+def create_drift_param_func(var,degree,subname,func):
+    """Creates a parameterized function that maps t for ]0;1[ to ]0, -inf[ while letting the params be in unconstrained space"""
+    # Map from 01 to -inf inf
+    f1 = from_01_to_m_inf_inf(var)
+
+    # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
+    params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree-1)])+",1",real=True)
+
+    # map parameteierzed function to 0 -inf
+    f2 = from_m_inf_inf_to_0_m_inf(func(f1,params))
+
+    return f2
+
+def create_diffusion_param_func(var,degree,subname,func):
+    """Creates a parameterized function that is always positive and with a positive derivative"""
+    # define params with biggest factor = 1 (must be postitive to ensure that the func goes to inf)
+    params = sp.symbols(" ".join([f"p_{subname}{i}" for i in range(degree)]),real=True)
+
+    # square paramterers, to ensure that we have a positive function
+    params = [param**2 for param in params]
+
+    # map parameteierzed function to 0 -inf
+    f2 = func(var,params)
+
+    return f2
+
+@dataclass
+class SDEConfigParamerterized:
+    name = "Custom"
+    t = Symbol('t', nonnegative=True, real=True)
+
+    drift_dimension = SDEDimension.DIAGONAL
+    diffusion_dimension = SDEDimension.DIAGONAL
+    diffusion_matrix_dimension = SDEDimension.SCALAR
+    n = 2 # n = 1 -> a scalar matrix
+    poly_degree = 4
+
+    # Using functions above
+    drift = sp.Matrix([create_drift_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+    diffusion = sp.Matrix([create_diffusion_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = Matrix([1]) # because of dimension choice, this will be delt with as I
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 1e-4
+    # TODO: Max sample value (as we cannot sample t=1 for drift)
+
+    module = 'jax'
+
+    drift_integral_form=True
+    diffusion_integral_form=True
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+    target = "epsilon" # x0
 
 
 @dataclass
