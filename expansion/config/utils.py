@@ -5,7 +5,10 @@ import jax
 from huggingface_hub import create_repo, upload_folder, HfFolder, whoami
 import os
 
-from diffusers.pipelines import FlaxDiffusionPipeline
+from typing import List
+
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 
 # LOGGING
 
@@ -72,3 +75,25 @@ def save_local_cloud(config: Config, params, pipeline, interface="jax", accelera
                 commit_message="End of training",
                 ignore_patterns=["step_*", "epoch_*"],
             )
+
+
+def initialize_sde_parameter_plot(config: Config):
+
+    def make_plot(parameters, name):
+        line_plot = make_subplots(1, 1, shared_xaxes=True, shared_yaxes=False)
+        for p in parameters:
+            line_plot.add_trace(go.Scatter(x=[], y=[], mode='lines+markers', name=f"{name}: {p}"))
+        return line_plot
+    
+    drift_param_plot = make_plot(config.sde.drift_parameters, "Drift")
+    diffusion_param_plot = make_plot(config.sde.diffusion_parameters, "Diffusion")
+    return drift_param_plot, diffusion_param_plot
+
+def update_sde_parameter_plot(plot, step, *args):
+
+    for i, arg in enumerate(args):
+        plot.data[i].x = list(plot.data[i].x) + [step]
+        plot.data[i].y = list(plot.data[i].y) + [arg.item()]
+
+
+

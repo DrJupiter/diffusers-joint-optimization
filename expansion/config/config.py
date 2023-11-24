@@ -99,10 +99,10 @@ class SDEConfig:
     n = 1 # n = 1 -> a scalar matrix
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
-    drift_parameters = Matrix([sympy.symbols("x1")])
-    diffusion_parameters = Matrix([sympy.symbols("x2")])
+    drift_parameters = Matrix([sympy.symbols("f1 f2")])
+    diffusion_parameters = Matrix([sympy.symbols("l1 l2")])
     
-    drift =-drift_parameters[0]**2*variable**2
+    drift =-drift_parameters[0]**2*variable**2 - drift_parameters[1] * variable
     diffusion = sympy.Piecewise((sympy.sin(variable/2 * sympy.pi), variable < 1), (1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 

@@ -16,7 +16,7 @@ from accelerate.utils import ProjectConfiguration
 
 
 from config.config import Config
-from config.utils import get_wandb_input, save_local_cloud 
+from config.utils import get_wandb_input, save_local_cloud, initialize_sde_parameter_plot, update_sde_parameter_plot 
 from data.dataload import get_dataset 
 
 from transformers import set_seed, CLIPTextModel, CLIPTokenizer
@@ -64,12 +64,14 @@ def main():
         log_kwargs = {"wandb": get_wandb_input(config)}
         project_name = log_kwargs["wandb"].pop("project")
         accelerator.init_trackers(project_name, init_kwargs=log_kwargs)
+        sde_param_plots = initialize_sde_parameter_plot(config)
 # LOAD DATA
 
 
     tokenizer = CLIPTokenizer.from_pretrained(
         config.training.pretrained_model_or_path, cache_dir=config.training.cache_dir, revision=config.training.revision, subfolder="tokenizer"
     )
+    tokenizer = torch.compile(tokenizer)
 
     train_dataset, train_dataloader = get_dataset(config, tokenizer, interface="torch", accelerator=accelerator)
 
@@ -86,35 +88,37 @@ def main():
         cache_dir=config.training.cache_dir,
     )
     text_encoder.requires_grad_(False)
+    text_encoder = torch.compile(text_encoder)
 
     # TODO Make this a class containing the SDE and the UNET
-    #unet = UNet2DConditionModel(sample_size=config.training.resolution,
-    #                            in_channels=3,
-    #                            out_channels=3,
-    #                            cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-    #                            )
     unet = UNet2DConditionModel(sample_size=config.training.resolution,
                                 in_channels=3,
                                 out_channels=3,
-                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-                                down_block_types=(
-                                    "DownBlock2D",  # a regular ResNet downsampling block
-                                    "DownBlock2D",
-                                    "DownBlock2D",
-                                    "DownBlock2D",
-                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-                                    "DownBlock2D",
-                                ),
-                                up_block_types=(
-                                    "UpBlock2D",  # a regular ResNet upsampling block
-                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                    "UpBlock2D",
-                                ),
-                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
                                 )
+#    unet = UNet2DConditionModel(sample_size=config.training.resolution,
+#                                in_channels=3,
+#                                out_channels=3,
+#                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+#                                down_block_types=(
+#                                    "DownBlock2D",  # a regular ResNet downsampling block
+#                                    "DownBlock2D",
+#                                    "DownBlock2D",
+#                                    "DownBlock2D",
+#                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+#                                    "DownBlock2D",
+#                                ),
+#                                up_block_types=(
+#                                    "UpBlock2D",  # a regular ResNet upsampling block
+#                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                    "UpBlock2D",
+#                                ),
+#                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+#                                )
+    unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
 
@@ -154,15 +158,21 @@ def main():
 
 # ACCELERATE
     unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler = accelerator.prepare(unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler)
-    print(noise_scheduler.parameters())
-    text_encoder.to(accelerator.device,dtype=config.training.mixed_precision[1])
 
+    text_encoder.to(accelerator.device,dtype=config.training.mixed_precision[1])
+    
 
 
 # TRAIN
 
     global_step = 0
     
+    if accelerator.is_main_process:
+            _log_drift_param, _log_diffusion_param = noise_scheduler.parameters() 
+            update_sde_parameter_plot(sde_param_plots[0], global_step, *_log_drift_param.detach())
+            update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
+            accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
+
     config.training.epochs = math.ceil(config.training.max_steps / num_update_steps_per_epoch)
 
     epochs = tqdm(range(config.training.epochs), desc="Epoch ... ", position=0)
@@ -237,6 +247,8 @@ def main():
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), config.optimizer.max_grad_norm)
+                    torch.nn.utils.clip_grad_value_(noise_scheduler.parameters(), config.optimizer.max_grad_norm)
+                    #accelerator.clip_grad_norm_(noise_scheduler.parameters(), config.optimizer.max_grad_norm) # TODO (KLAUS): POTENTIALLY UNDESERIED
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -250,8 +262,12 @@ def main():
 
 
         if accelerator.is_main_process: 
-             
-            print(noise_scheduler.parameters())
+
+            _log_drift_param, _log_diffusion_param = noise_scheduler.parameters() 
+            update_sde_parameter_plot(sde_param_plots[0], global_step, *_log_drift_param.detach())
+            update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
+            accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
+
             pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
