@@ -46,7 +46,7 @@ class TrainingConfig:
 
     center_crop = False
     random_flip = True
-    resolution = 128 # 32
+    resolution = 32 # 32
 
 # HYPER PARAMETERS
     seed = 0
@@ -60,7 +60,7 @@ class TrainingConfig:
 
     save_dir = "pokemon-test-tti"
     push_to_hub = True
-    pretrained_model_or_path ="stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
 @dataclass
@@ -97,11 +97,15 @@ class SDEConfig:
     diffusion_dimension = SDEDimension.SCALAR
     diffusion_matrix_dimension = SDEDimension.SCALAR 
     n = 1 # n = 1 -> a scalar matrix
+
+    # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
+    drift_parameters = Matrix([sympy.symbols("x1")])
+    diffusion_parameters = Matrix([sympy.symbols("x2")])
     
-    drift = Matrix.diag([-100*variable**2]*n).diagonal()
-    diffusion = Matrix.diag([sympy.Piecewise((sympy.sin(variable/2 * sympy.pi), variable < 1), (1, variable >= 1))]*n).diagonal()
+    drift =-drift_parameters[0]**2*variable**2
+    diffusion = sympy.Piecewise((sympy.sin(variable/2 * sympy.pi), variable < 1), (1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
-    diffusion_matrix = Matrix.eye(n).diagonal()
+    diffusion_matrix = 1 
 
     initial_variable_value = 0
     max_variable_value = 1 # math.inf
@@ -159,35 +163,37 @@ def create_diffusion_param_func(var,degree,subname,func):
 
     return f2
 
-@dataclass
-class SDEConfigParamerterized:
-    name = "Custom"
-    t = Symbol('t', nonnegative=True, real=True)
-
-    drift_dimension = SDEDimension.DIAGONAL
-    diffusion_dimension = SDEDimension.DIAGONAL
-    diffusion_matrix_dimension = SDEDimension.SCALAR
-    n = 2 # n = 1 -> a scalar matrix
-    poly_degree = 4
-
-    # Using functions above
-    drift = sp.Matrix([create_drift_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
-    diffusion = sp.Matrix([create_diffusion_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
-    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
-    diffusion_matrix = Matrix([1]) # because of dimension choice, this will be delt with as I
-
-    initial_variable_value = 0
-    max_variable_value = 1 # math.inf
-    min_sample_value = 1e-4
-    # TODO: Max sample value (as we cannot sample t=1 for drift)
-
-    module = 'jax'
-
-    drift_integral_form=True
-    diffusion_integral_form=True
-    diffusion_integral_decomposition = 'cholesky' # ldl
-
-    target = "epsilon" # x0
+# !! TODO (KLAUS): FOR SOME REASON IT SAYS t isn't defined in the var = t statement. 
+# !! I HAVE NO IDEA WHY, AND IT MIGHT JUST BE ON MY MACHINE. 
+# !! THAT'S WHY I'VE COMMENTED IT OUT.
+#@dataclass
+#class SDEConfigParamerterized:
+#    name = "Custom"
+#    t = Symbol('t', nonnegative=True, real=True)
+#
+#    drift_dimension = SDEDimension.DIAGONAL
+#    diffusion_dimension = SDEDimension.DIAGONAL
+#    diffusion_matrix_dimension = SDEDimension.SCALAR
+#    n = 2 # n = 1 -> a scalar matrix
+#    poly_degree = 4
+#    # Using functions abovae
+#    drift = sp.Matrix([create_drift_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+#    diffusion = sp.Matrix([create_diffusion_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
+#    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+#    diffusion_matrix = Matrix([1]) # because of dimension choice, this will be delt with as I
+#
+#    initial_variable_value = 0
+#    max_variable_value = 1 # math.inf
+#    min_sample_value = 1e-4
+#    # TODO: Max sample value (as we cannot sample t=1 for drift)
+#
+#    module = 'jax'
+#
+#    drift_integral_form=True
+#    diffusion_integral_form=True
+#    diffusion_integral_decomposition = 'cholesky' # ldl
+#
+#    target = "epsilon" # x0
 
 
 @dataclass
@@ -195,7 +201,7 @@ class Config:
     logging = WandbConfig()
     training = TrainingConfig()
     sde = SDEConfig()
-    sde.data_dim = training.resolution
+    sde.data_dim = training.resolution ** 2 * 3
 
     optimizer = OptimizerConfig()
     if optimizer.scale_lr:
@@ -203,16 +209,17 @@ class Config:
 
 
     # SANITY CHECKS for the SDE
-    if sde.drift_type == SDEDimension.SCALAR:
-        assert sde.drift.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    elif sde.drift_type == SDEDimension.DIAGONAL:
-        assert sde.drift.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    elif sde.drift_type == SDEDimension.FULL:
-        assert sde.drift.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
+    # TODO (KLAUS) : REFACTOR 
+    #if sde.drift_type == SDEDimension.SCALAR:
+    #    assert sde.drift.shape == (1,1), "A scalar drift must have dimensions (1,1)"
+    #elif sde.drift_type == SDEDimension.DIAGONAL:
+    #    assert sde.drift.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
+    #elif sde.drift_type == SDEDimension.FULL:
+    #    assert sde.drift.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
     
-    if sde.diffusion_type == SDEDimension.SCALAR:
-        assert sde.diffusion.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    elif sde.diffusion_type == SDEDimension.DIAGONAL:
-        assert sde.diffusion.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    elif sde.diffusion_type == SDEDimension.FULL:
-        assert sde.diffusion.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
+    #if sde.diffusion_type == SDEDimension.SCALAR:
+    #    assert sde.diffusion.shape == (1,1), "A scalar drift must have dimensions (1,1)"
+    #elif sde.diffusion_type == SDEDimension.DIAGONAL:
+    #    assert sde.diffusion.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
+    #elif sde.diffusion_type == SDEDimension.FULL:
+    #    assert sde.diffusion.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"

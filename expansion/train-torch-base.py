@@ -29,10 +29,11 @@ from pipelines.pipeline_tti_torch import UTTIPipeline
 check_min_version("0.22.0.dev0")
 import wandb
 
-from diffusers import (DDPMScheduler,DDIMScheduler, UNet2DConditionModel)
+from diffusers import (UNet2DConditionModel)
 from diffusers.optimization import get_cosine_schedule_with_warmup
 
-from sde_torch import TorchSDE 
+#from sde_torch import TorchSDE 
+from sde_torch_param import TorchSDE_PARAM
 
 def main():
 
@@ -87,37 +88,64 @@ def main():
     text_encoder.requires_grad_(False)
 
     # TODO Make this a class containing the SDE and the UNET
+    #unet = UNet2DConditionModel(sample_size=config.training.resolution,
+    #                            in_channels=3,
+    #                            out_channels=3,
+    #                            cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+    #                            )
     unet = UNet2DConditionModel(sample_size=config.training.resolution,
                                 in_channels=3,
                                 out_channels=3,
-                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+                                down_block_types=(
+                                    "DownBlock2D",  # a regular ResNet downsampling block
+                                    "DownBlock2D",
+                                    "DownBlock2D",
+                                    "DownBlock2D",
+                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+                                    "DownBlock2D",
+                                ),
+                                up_block_types=(
+                                    "UpBlock2D",  # a regular ResNet upsampling block
+                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                    "UpBlock2D",
+                                ),
+                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
                                 )
-#    unet = UNet2DConditionModel(sample_size=config.training.resolution,
-#                                in_channels=3,
-#                                out_channels=3,
-#                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-#                                down_block_types=(
-#                                    "DownBlock2D",  # a regular ResNet downsampling block
-#                                    "DownBlock2D",
-#                                    "DownBlock2D",
-#                                    "DownBlock2D",
-#                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-#                                    "DownBlock2D",
-#                                ),
-#                                up_block_types=(
-#                                    "UpBlock2D",  # a regular ResNet upsampling block
-#                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-#                                    "UpBlock2D",
-#                                    "UpBlock2D",
-#                                    "UpBlock2D",
-#                                    "UpBlock2D",
-#                                ),
-#                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-#                                )
     unet.train()    
+# NOISE SCHEDULAR
 
+    #noise_scheduler = DDIMScheduler()
+
+    # TODO (KLAUS): Add tunable paramter to SDE
+    #noise_scheduler = TorchSDE_PARAM(config.sde.min_sample_value, config.sde.data_dim, config.sde.variable, config.)
+    noise_scheduler = TorchSDE_PARAM(
+    device=accelerator.device,
+    min_sample_value=config.sde.min_sample_value,
+    data_dimension=config.sde.data_dim,
+    variable=config.sde.variable,
+    drift_parameters=config.sde.drift_parameters,
+    diffusion_parameters=config.sde.diffusion_parameters,
+    drift=config.sde.drift,
+    diffusion=config.sde.diffusion,
+    diffusion_matrix=config.sde.diffusion_matrix,
+    initial_variable_value=config.sde.initial_variable_value,
+    max_variable_value=config.sde.max_variable_value,
+    module=config.sde.module,
+    model_target=config.sde.target,
+    drift_integral_form=config.sde.drift_integral_form,
+    diffusion_integral_form=config.sde.diffusion_integral_form,
+    diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
+    drift_dimension=config.sde.drift_dimension,
+    diffusion_dimension=config.sde.diffusion_dimension,
+    diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
+)
 # Optimizer 
-    optimizer = torch.optim.AdamW(unet.parameters(), lr=config.optimizer.learning_rate)
+    optimizer = torch.optim.AdamW([{"params": unet.parameters()}, {"params": noise_scheduler.parameters(), "lr": 1}], lr=config.optimizer.learning_rate)
+
     lr_scheduler = get_cosine_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=config.optimizer.warmup_steps,
@@ -125,16 +153,12 @@ def main():
     )
 
 # ACCELERATE
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(unet, optimizer, train_dataloader, lr_scheduler)
+    unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler = accelerator.prepare(unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler)
+    print(noise_scheduler.parameters())
     text_encoder.to(accelerator.device,dtype=config.training.mixed_precision[1])
 
 
-# NOISE SCHEDULAR
 
-    #noise_scheduler = DDIMScheduler()
-
-    # TODO (KLAUS): Add tunable paramter to SDE
-    noise_scheduler = TorchSDE(config.sde.variable, config.sde.drift, config.sde.diffusion, config.sde.diffusion_matrix, config.sde.initial_variable_value, config.sde.max_variable_value, config.sde.min_sample_value, config.sde.module, config.sde.target, config.sde.drift_integral_form, config.sde.diffusion_integral_form, config.sde.diffusion_integral_decomposition, config.sde.drift_diagonal_form, config.sde.diffusion_diagonal_form, config.sde.diffusion_matrix_diagonal_form)
 # TRAIN
 
     global_step = 0
@@ -150,7 +174,6 @@ def main():
         train_loss = 0.0
         for batch in train_dataloader:
             
-      
             with accelerator.accumulate(unet):
 
                 clean_images = batch["pixel_values"]
@@ -182,7 +205,7 @@ def main():
 
                 noise = torch.randn_like(clean_images, device=clean_images.device)
                 # TODO (KLAUS): FIGURE OUT IF WE STORE THE PARAMTERS IN THE MODEL OR PASS THEM AROUND.
-                noisy_images = noise_scheduler.sample(timesteps, clean_images, noise, device=accelerator.device)
+                noisy_images = noise_scheduler.sample(timesteps, clean_images.reshape(batch_size_z,-1), noise.reshape(batch_size_z,-1),*noise_scheduler.parameters(), device=accelerator.device).reshape(clean_images.shape)
 
 #                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
 #                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
@@ -228,6 +251,7 @@ def main():
 
         if accelerator.is_main_process: 
              
+            print(noise_scheduler.parameters())
             pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET

@@ -7,10 +7,21 @@ import jax.numpy as jnp
 import jax
 # TODO (Klaus) : Add mxin and config so we can save properly
 import torch
+batch_matmul = torch.vmap(torch.matmul)
 
-class TorchSDE_PARAM(SDE_PARAM, torch.autograd.Function):
+def jax_torch(array, requires_grad=False):
+    array = torch.from_numpy(np.array(array))
+    array.requires_grad_(requires_grad)
+    return array
+
+def torch_jax(tensor):
+    return jnp.array(tensor.numpy(force=True))
+
+class TorchSDE_PARAM(SDE_PARAM):
     def __init__(
         self,
+    device: str,
+    min_sample_value: float,
     data_dimension: int,
     variable: Any,
     drift_parameters: Any,
@@ -29,10 +40,39 @@ class TorchSDE_PARAM(SDE_PARAM, torch.autograd.Function):
     diffusion_dimension: SDEDimension = SDEDimension.DIAGONAL,
     diffusion_matrix_dimension: SDEDimension = SDEDimension.SCALAR):
         super().__init__(variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, model_target, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_dimension, diffusion_dimension, diffusion_matrix_dimension)
+
         self.lambdify_symbolic_functions(data_dimension)
-    
-    def sample(self, *args, **kwargs):
-        return self.get_gradient_function().apply(*args, **kwargs)
+
+        self.initialize_parameters(device=device) # TODO (KLAUS): CONSIDER IF IT IS SMARTEST TO LEAVE INITIALIZING TO THE USER ALWAYS
+        self.device=device
+        self.min_sample_value = min_sample_value
+        
+    def initialize_parameters(self, drift_parameters=None, diffusion_parameters=None, device="cuda"):
+
+        match self.drift_parameters.shape:
+            case (1, x) | (x, 1):
+                drift_shape = (x,)        
+            case _shape:
+                drift_shape = _shape
+        
+        tensor_drift_parameters = drift_parameters if drift_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.drift_parameters.shape)).reshape(drift_shape).to(device) # TODO (KLAUS): Initialize smartly
+
+        match self.diffusion_parameters.shape:
+            case (1, x) | (x, 1):
+                diffusion_shape = (x,)
+            case _shape:
+                diffusion_shape = _shape
+
+        tensor_diffusion_parameters = diffusion_parameters if diffusion_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.diffusion_parameters.shape)).reshape(diffusion_shape).to(device) # TODO (KLAUS): Initialize smartly
+
+        self.tensor_drift_parameters = torch.nn.parameter.Parameter(tensor_drift_parameters, requires_grad=True)
+        self.tensor_diffusion_parameters = torch.nn.parameter.Parameter(tensor_diffusion_parameters, requires_grad=True)
+
+    def parameters(self):
+        return [self.tensor_drift_parameters, self.tensor_diffusion_parameters]
+
+    def sample(self, *args, device="cuda", **kwargs):
+        return self.get_gradient_function().apply(*args, **kwargs).to(device)
 
     def get_gradient_function(self):
 
@@ -40,7 +80,7 @@ class TorchSDE_PARAM(SDE_PARAM, torch.autograd.Function):
 
             @staticmethod
             def forward(*args: Any, **kwargs: Any) -> Any:
-                return self.v_lambdified_sample(*args, **kwargs)
+                return jax_torch(self.v_lambdified_sample(*[torch_jax(arg) for arg in args], **kwargs), requires_grad=True)
 
             @staticmethod 
             def setup_context(ctx: Any, inputs: Tuple[Any, ...], output: Any) -> Any:
@@ -49,14 +89,27 @@ class TorchSDE_PARAM(SDE_PARAM, torch.autograd.Function):
                 #return super().setup_context(ctx, inputs, output) 
             
             @staticmethod
-            def backward(ctx: Any, *grad_outputs: Any) -> Any:
-                return None, None, None, grad_outputs * self.v_lambdified_drift_derivative(ctx.saved_tensors), grad_outputs * self.v_lambdified_diffusion_derivative(ctx.saved_tensors) 
+            def backward(ctx: Any, grad_output) -> Any:
+                tensors = [torch_jax(tensor) for tensor in ctx.saved_tensors]
+                return None, None, None, batch_matmul(grad_output , jax_torch(self.v_lambdified_drift_derivative(*tensors))).to(self.device), batch_matmul(grad_output , jax_torch(self.v_lambdified_diffusion_derivative(*tensors))).to(self.device)
                 #return super().backward(ctx, *grad_outputs)
 
         return TorchSDE_PARAM_F
+    def set_timesteps(self, num_inference_steps, batch_size, device):
+        self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device).repeat(batch_size)
+    
+    def reverse_time_derivative(self, timesteps, data, noise, model_output, drift_param, diffusion_param, device="cuda"):
+        
+        args = (timesteps, data, noise, model_output, drift_param, diffusion_param)
+        return jax_torch(self.v_lambdified_reverse_time_derivative(*(torch_jax(arg) for arg in args))).to(device)
+
+    def step(self, data, reverse_time_derivative, dt):
+        return data + dt * reverse_time_derivative
 
 if __name__ == "__main__":
-
+    torch.nn.Parameter
+    from jax import config
+    config.update("jax_enable_x64", True)
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
     import sympy
@@ -74,35 +127,51 @@ if __name__ == "__main__":
 
     v_drift_param =  jnp.array([1.,1.,1.])
     v_diffusion_param =  jnp.array([4.,4.])
+    print(v_drift_param.shape)
     #v_drift_param = v_diffusion_param = jnp.array([None])
 
-    n = 2 # dims of problem
-    timesteps = jnp.array([0.1,0.4])
+    n = 4 # dims of problem
+    timesteps = jnp.array([0.1, 0.4])
     x0 = jnp.ones((len(timesteps), n))*1/2
 
-    model_output = jnp.ones_like(x0)
 
     z = jax.random.normal(jax.random.PRNGKey(0), x0.shape)
-
+    #z = jnp.array([[ 0.08086788, -0.38624702, -0.37565558,  1.66897423]])
+    print(z)
     F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
     L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) # n x n, but to use as diagonal then do 1 x n, 1 x 1 
-    
 
 
     Q = Matrix.eye(n)
     # Normal test
 
-    z = torch.from_numpy(np.array(z))
-    x0 = torch.from_numpy(np.array(x0))
-    v_drift_param =  jnp.array([1.,1.,1.])
-    v_diffusion_param =  jnp.array([4.,4.])
+    timesteps = jax_torch(timesteps)
+    z = jax_torch(z)
+    x0 = jax_torch(x0)
+    v_drift_param =  jax_torch(v_drift_param, requires_grad=True)
+    v_diffusion_param =  jax_torch(v_diffusion_param, requires_grad=True)
+    model_output = torch.ones_like(x0) 
+    torch.set_printoptions(precision=8)
+    sde = TorchSDE_PARAM(1e-3, n, t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
+    #sde.initialize_parameters(v_drift_param, v_diffusion_param)
+    sde.initialize_parameters()
+    print(sde.parameters())
+    optimizer = torch.optim.SGD(sde.parameters(), lr=1, momentum=0.99)
 
-    sde = TorchSDE_PARAM(2, t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
-    sde.lambdify_symbolic_functions(n)
-    samples = sde.sample(timesteps, x0, z, v_drift_param, v_diffusion_param)
-    print(samples, type(samples))
+    #samples = sde.sample(timesteps, x0, z, v_drift_param , v_diffusion_param)
+    #print(samples)
+
+    samples = sde.sample(timesteps, x0, z, *sde.parameters(), device="cuda")
+    print(samples)
+    samples.sum().backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    print(sde.parameters())
+
+    #print(samples.sum().backward(), type(samples))
+    torch.autograd.gradcheck(lambda param, param2: sde.sample(timesteps, x0, z, param, param2), (v_drift_param, v_diffusion_param)) 
+    print(sde.reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param, device="cuda") )
     
-     
 
 """ 
 class TorchSDE(SDE_PARAM):

@@ -32,16 +32,19 @@ class DRIFT:
             self.drift = drift
             self.drift_int = sympy.integrate(drift,variable)
 
-        if dimension == SDEDimension.FULL: 
-        #if not diagonal:
-            assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
-            # This check is not neccesary for diagonal matrices, as they will always commute.
+        match dimension:
+            case SDEDimension.FULL:
+                assert self.drift @ self.drift_int == self.drift_int @ self.drift, "The drift must commute with it's integral"
+                # This check is not neccesary for diagonal matrices, as they will always commute.
         
-            self.symbolic_solution_matrix =  (self.drift_int-self.drift_int.limit(variable, initial_value)).exp()
-        elif (dimension == SDEDimension.SCALAR) | (dimension == SDEDimension.DIAGONAL):
-            # We can split up the exponential
-            #self.solution_matrix = lambdify(variable, matrix_multiply_elementwise(self.drift_int.applyfunc(sympy.exp).transpose(),(-self.drift_int).applyfunc(sympy.exp).limit(variable,initial_value).transpose()), module)
-            self.symbolic_solution_matrix = (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp)
+                self.symbolic_solution_matrix =  (self.drift_int-self.drift_int.limit(variable, initial_value)).exp()
+            case SDEDimension.DIAGONAL:
+                # We can split up the exponential
+                #self.solution_matrix = lambdify(variable, matrix_multiply_elementwise(self.drift_int.applyfunc(sympy.exp).transpose(),(-self.drift_int).applyfunc(sympy.exp).limit(variable,initial_value).transpose()), module)
+                self.symbolic_solution_matrix = (self.drift_int-self.drift_int.limit(variable,initial_value)).applyfunc(sympy.exp)
+            case SDEDimension.SCALAR:
+
+                self.symbolic_solution_matrix = sympy.exp(self.drift_int-self.drift_int.limit(variable,initial_value))
 
         self.solution_matrix = lambdify([variable, parameters], self.symbolic_solution_matrix, module)
 
@@ -78,15 +81,19 @@ class DIFFUSION:
             self.diffusion_int = diffusion
             diffusion_term = sympy.diff(self.diffusion_int, variable)
             if integral_decomposition == 'cholesky':
-
+                
+                # TODO (KLAUS): the diffusion matrix should be genereted based on its supplied dimension
                 if diffusion_dimension == SDEDimension.FULL:
                 #if not diagonal:
                     self.diffusion = diffusion_term.cholesky()
                     self.diffusion_matrix = Matrix.eye(self.diffusion.shape[0])
-                elif (diffusion_dimension == SDEDimension.SCALAR) | (diffusion_dimension == SDEDimension.DIAGONAL):
+                elif diffusion_dimension == SDEDimension.DIAGONAL:
                     self.diffusion = diffusion_term.applyfunc(sympy.sqrt)
                     # TODO: ADD CHECK TO SEE IF THE SOLUTION IS VALID
                     self.diffusion_matrix = sympy.ones(*self.diffusion.shape)
+                elif diffusion_dimension == SDEDimension.SCALAR:
+                    self.diffusion = sympy.sqrt(diffusion_term)
+                    self.diffusion_matrix = 1
                     
             elif integral_decomposition == 'ldl':
                 if diffusion_dimension == SDEDimension.FULL:
@@ -135,7 +142,9 @@ class DIFFUSION:
 
                 case (SDEDimension.SCALAR, _):
                     # This case works for any scalar diffusion combination
-                    self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
+                    #self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
+                    self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion * self.diffusion_matrix, variable) 
+
                 
                 case (SDEDimension.FULL, SDEDimension.SCALAR):
                     self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
@@ -146,60 +155,36 @@ class DIFFUSION:
                 case (SDEDimension.SCALAR, SDEDimension.SCALAR):
                     self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion, variable)
 
-           # if diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.FULL: 
-           # #if not diagonal and not diagonal_diffusion:
-           #     self.diffusion_int = sympy.integrate(self.diffusion@(self.diffusion_matrix@self.diffusion.transpose()), variable)
-
-           # elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:
-           # #elif diagonal and diagonal_diffusion:
-           #     self.diffusion_int = sympy.integrate(matrix_multiply_elementwise(self.diffusion, matrix_multiply_elementwise(self.diffusion_matrix, self.diffusion)), variable)
-           # 
-           # 
-           # elif diffusion_dimension == SDEDimension.FULL and diffusion_matrix_dimension == SDEDimension.DIAGONAL:    
-           # #elif not diagonal and diagonal_diffusion:
-           #     
-           #     self.diffusion_int = sympy.integrate(matrix_diagonal_product(self.diffusion, self.diffusion_matrix) @ self.diffusion.transpose(), variable)
-           #     
-           #     
-           # elif diffusion_dimension == SDEDimension.DIAGONAL and diffusion_matrix_dimension == SDEDimension.FULL:    
-           # #elif diagonal and not diagonal_diffusion:
-           #     
-           #     self.diffusion_int = sympy.integrate(matrix_diagonal_product(matrix_diagonal_product(self.diffusion_matrix, self.diffusion).transpose(), self.diffusion).transpose(), variable)
-
-           # # TODO (KLAUS) : TEST THIS HANDLES ALL CASES CORRECTLY
-           # elif diffusion_dimension == SDEDimension.SCALAR:
-
-           #     self.diffusion_int = sympy.integrate(sympy.HadamardProduct(sympy.HadamardProduct((self.diffusion_matrix), self.diffusion.T), self.diffusion), variable) 
-
-           # elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.FULL:
-
-           #     self.diffusion_int = sympy.integrate(self.diffusion * self.diffusion_matrix * self.diffusion.T, variable) 
-           # 
-           # elif diffusion_matrix_dimension == SDEDimension.SCALAR and diffusion_dimension == SDEDimension.DIAGONAL:
-
-           #     self.diffusion_int = sympy.integrate(self.diffusion_matrix * sympy.HadamardProduct((self.diffusion ,  self.diffusion.T)), variable) 
-            # TODO (KLAUS) : HANDLE SDEDIMENSION.SCALAR
-
+        
         # TODO (KLAUS) : SEE IF POSSIBLE TO REIMPLEMENT LIMIT, CAUSES PROBLEMS WITH MAX AND MIN FUNCTIONS ON SERIES                
         #self.solution_matrix = (self.diffusion_int-self.diffusion_int.limit(variable, initial_value, '+'))
         self.solution_matrix = (self.diffusion_int-self.diffusion_int.subs(variable, initial_value))
 
-        if diffusion_dimension == SDEDimension.FULL or diffusion_matrix_dimension == SDEDimension.FULL: 
+        match (diffusion_dimension, diffusion_matrix_dimension):
+            case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
+        #if diffusion_dimension == SDEDimension.FULL or diffusion_matrix_dimension == SDEDimension.FULL: 
         #if not self.diagonal_form:
             
-            # TODO: ADD CHECK TO SEE IF THE SOLUTION IS VALID
-            self.decomposition = self.solution_matrix.cholesky()
-            self.inv_decomposition = self.decomposition.inv()
-            self.inv_covariance = self.solution_matrix.inv()
-        else:
+            # TODO (KLAUS): ADD CHECK TO SEE IF THE SOLUTION IS VALID
+                self.decomposition = self.solution_matrix.cholesky()
+                self.inv_decomposition = self.decomposition.inv()
+                self.inv_covariance = self.solution_matrix.inv()
+            case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
+        #else:
             
-            self.decomposition = self.solution_matrix.applyfunc(sympy.sqrt)
-            self.inv_decomposition = self.decomposition.applyfunc(lambda x: 1/x)
-            self.inv_covariance = self.solution_matrix.applyfunc(lambda x: 1/x)
+                self.decomposition = self.solution_matrix.applyfunc(sympy.sqrt)
+                self.inv_decomposition = self.decomposition.applyfunc(lambda x: 1/x)
+                self.inv_covariance = self.solution_matrix.applyfunc(lambda x: 1/x)
+            case (SDEDimension.SCALAR, SDEDimension.SCALAR):
+                self.decomposition = sympy.sqrt(self.solution_matrix)
+                self.inv_decomposition = 1/self.decomposition
+                self.inv_covariance = 1/self.solution_matrix
         
         self.diffusion_call = lambdify([variable, parameters], self.diffusion, module)
 
         self.symbolic_decomposition = self.decomposition
+        #print(f"{self.symbolic_decomposition.shape=}")
+
         self.decomposition = lambdify([variable, parameters], self.decomposition, module)
 
         self.symbolic_inv_decomposition = self.inv_decomposition
@@ -244,6 +229,7 @@ class SDE_PARAM:
         # batch_dim is one, because inputs will be vmapped or vectorized in another fashion.
         self.batch_dim = 1
         self.data_dim = sympy.symbols("data_dim", integer=True, nonnegative=True)
+        #self.data_dim = 4
 
         self.symbolic_input = sympy.MatrixSymbol("X", self.batch_dim, self.data_dim)
 
@@ -260,6 +246,7 @@ class SDE_PARAM:
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
         symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
+        print(f"{symbolic_sample.shape=}")
 
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
         symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
@@ -318,7 +305,10 @@ class SDE_PARAM:
             case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
                 decomposition_product = sympy.HadamardProduct(A, self.symbolic_noise)
             case (SDEDimension.SCALAR, SDEDimension.SCALAR):
+                #decomposition_product = sympy.tensorproduct(A  self.symbolic_noise)
+
                 decomposition_product = A * self.symbolic_noise
+                #decomposition_product = sympy.HadamardProduct(self.symbolic_noise, A)
 
 
         return mean + decomposition_product 
@@ -337,7 +327,10 @@ class SDE_PARAM:
             case SDEDimension.DIAGONAL:
                 mean = sympy.HadamardProduct(exp_F, self.symbolic_input)
             case SDEDimension.SCALAR:
-                mean = exp_F * self.symbolic_input
+                # TODO (KLAUS): CAN WE DO BETTER THAN TENSOR PRODUCT? -> Problem jax.dot is produced with *
+                #mean = sympy.tensorproduct(exp_F , self.symbolic_input)
+                mean = exp_F * self.symbolic_input 
+                #mean = sympy.HadamardProduct(self.symbolic_input,exp_F) 
 
         return mean
       
@@ -372,7 +365,7 @@ class SDE_PARAM:
             case SDEDimension.DIAGONAL:
                 diffusion_term = - sympy.HadamardProduct(sympy.HadamardProduct(self.diffusion.diffusion, self.diffusion.diffusion), score) + sympy.HadamardProduct(self.diffusion.diffusion, self.symbolic_noise) 
             case SDEDimension.SCALAR:
-                diffusion_term = - self.diffusion.diffusion * self.diffusion.diffusion * score + self.diffusion.diffusion * self.symbolic_noise
+                diffusion_term = - (self.diffusion.diffusion * self.diffusion.diffusion) * score + self.diffusion.diffusion * self.symbolic_noise
 
         return self.symbolic_mean() + diffusion_term 
 
@@ -447,12 +440,12 @@ if __name__ == "__main__":
 
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
+    from jax import config
+    config.update("jax_enable_x64", True)
     sympy.init_printing(use_unicode=True, use_latex=True)
     t = Symbol('t', nonnegative=True, real=True)
-    drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
+    #drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
-    drift_param = Matrix([x1,x2,x3])
-    diffusion_param = Matrix([x4,x5])
 
     drift_param = Matrix([x1,x2,x3])
     diffusion_param = Matrix([x4,x5])
@@ -463,20 +456,19 @@ if __name__ == "__main__":
     #v_drift_param = v_diffusion_param = jnp.array([None])
 
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1,0.4]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
-    n = 2 # dims of problem
+    timesteps = jnp.array([0.1]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
+    n = 4 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))*1/2
-    key2, subkey = jax.random.split(key)
-    z = jax.random.normal(subkey, x0.shape)
-
+    z = jax.random.normal(key, x0.shape)
+    print(z)
     model_output = jnp.ones_like(x0)
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
     F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
     L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) # n x n, but to use as diagonal then do 1 x n, 1 x 1 
-    
+
     drift_dimension = SDEDimension.FULL
     drift_dimension = SDEDimension.DIAGONAL
     drift_dimension = SDEDimension.SCALAR
@@ -488,6 +480,11 @@ if __name__ == "__main__":
     Q = Matrix.eye(n)
     # Normal test
 
+    S_F = sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]
+    S_L = sympy.sin(t)*diffusion_param[0]+diffusion_param[1]
+    S_Q = 1 
+
+    #print(F.shape, S_F.shape, S_L.shape, S_Q.shape)
     outputs = []
     integral_outputs = []
 
@@ -501,24 +498,23 @@ if __name__ == "__main__":
     integral_reverse_time_derivatives = [] 
 
 
-    sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
+    sde = SDE_PARAM(t, drift_param, diffusion_param, S_F, S_L, S_Q, drift_dimension=SDEDimension.SCALAR, diffusion_dimension=SDEDimension.SCALAR, diffusion_matrix_dimension=SDEDimension.SCALAR)
     sde.lambdify_symbolic_functions(n)
-    #symbolic_sample = sde.symbolic_sample().subs({sde.data_dim: n})
-    ##print(symbolic_sample)
-    ##symbolic_sample = sympy.simplify(symbolic_sample)
-    #ss = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  symbolic_sample, "jax")
-    #ss_derivate_drift = lambdify([sde.variable, sde.symbolic_input.subs({sde.data_dim:n}),sde.symbolic_noise.subs({sde.data_dim:n}), sde.drift_parameters, sde.diffusion_parameters],  sympy.simplify(symbolic_sample.diff(sde.drift_parameters)), "jax")
-    #num_ss_derivate_drift = lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T
-    #print(ss(timesteps, x0, z, v_drift_param, v_diffusion_param))
-    #v_ss = jax.vmap(ss, (0,0, 0, None, None))
-    #v_ss_drift = jax.vmap(lambda t, data, noise, drift, diffusion: jnp.squeeze(ss_derivate_drift(t, data, noise, drift, diffusion)).T, (0,0, 0, None, None))
-    #out_v = v_ss(timesteps, x0, z, v_drift_param, v_diffusion_param)
+    #sde.lambdified_sample(timesteps[0],x0[0],z[0],v_drift_param, v_diffusion_param)
+
     outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
     diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
-    #out_v_grad = v_ss_drift(timesteps, x0, z, v_drift_param, v_diffusion_param)
-    #print(out_v_grad)
+
+    sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
+    sde.lambdify_symbolic_functions(n)
+
+    outputs.append(sde.v_lambdified_sample(timesteps, x0, z, v_drift_param, v_diffusion_param) )
+    diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
+    reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
+
     
     # Integral test
     sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL,

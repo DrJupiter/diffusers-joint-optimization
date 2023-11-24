@@ -124,11 +124,10 @@ class UTTIPipeline(DiffusionPipeline):
             image = randn_tensor(image_shape, generator=generator, device=self.device)
 
         # set step values
-        self.scheduler.set_timesteps(num_inference_steps, device)
+        self.scheduler.set_timesteps(num_inference_steps, (1), device)
+        dt = torch.tensor([-(self.scheduler.max_variable_value-self.scheduler.min_sample_value)/(num_inference_steps-1)]).to(device)
 
-        dt = -(self.scheduler.max_variable_value-self.scheduler.min_sample_value)/(num_inference_steps-1)
-
-        def denoise(image, prompt_embeddings, key):
+        def denoise(image, prompt_embeddings):
             for t in self.progress_bar(self.scheduler.timesteps):
                 # 1. predict noise model_output
                 model_output = self.unet(image, t, encoder_hidden_states=prompt_embeddings).sample
@@ -140,16 +139,18 @@ class UTTIPipeline(DiffusionPipeline):
                     print("nan value or inf from model output")
                     print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
                     print(f"nan values in image {torch.isnan(image).sum()}")
-                image, image_derivative, key = self.scheduler.step(model_output, t, image, key, dt, device)
-                # TODO (KLAUS): methods
+                noise = randn_tensor(image_shape, device=self.device) 
+                reverse_time_derivative =  self.scheduler.reverse_time_derivative(t.repeat(batch_size), image, noise, model_output, *self.scheduler.parameters(), device)
+
+                image = self.scheduler.step(image, reverse_time_derivative, dt)
                 
 
                 if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
                     print(t)
                     print("nan values in image")
-            return image, key
-        image, key = denoise(image, prompt_embeddings, key)
-        if gen_twice:
+            return image
+        image = denoise(image, prompt_embeddings)
+        if gen_twice and False:
             """
             Generate a noisy image based on the final generation and then denoise
             """
