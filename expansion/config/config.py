@@ -41,7 +41,7 @@ class TrainingConfig:
     try_convert_label_string = False # True
 
     cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
-
+    
 # IMAGE CONFIGURATION
 
     center_crop = False
@@ -51,7 +51,7 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 40
+    batch_size = 128
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
@@ -99,10 +99,10 @@ class SDEConfig:
     n = 1 # n = 1 -> a scalar matrix
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
-    drift_parameters = Matrix([sympy.symbols("f1 f2")])
-    diffusion_parameters = Matrix([sympy.symbols("l1 l2")])
+    drift_parameters = Matrix([sympy.symbols("f1")])
+    diffusion_parameters = Matrix([sympy.symbols("l1")])
     
-    drift =-drift_parameters[0]**2*variable**2 - drift_parameters[1] * variable
+    drift =-100*variable**2 
     diffusion = sympy.Piecewise((sympy.sin(variable/2 * sympy.pi), variable < 1), (1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 

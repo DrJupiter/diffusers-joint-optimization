@@ -24,7 +24,7 @@ from transformers import set_seed, CLIPTextModel, CLIPTokenizer
 from diffusers.utils import check_min_version, make_image_grid
 from diffusers.utils.pil_utils import numpy_to_pil
 
-from pipelines.pipeline_tti_torch import UTTIPipeline
+from pipelines.pipeline_tti_torch import UTTIPipeline, Noise, SDESolver
 
 check_min_version("0.22.0.dev0")
 import wandb
@@ -43,9 +43,6 @@ def main():
 # SET SEED
     if config.training.seed is not None:
         set_seed(config.training.seed)
-
-    # jax rng
-    key = jax.random.PRNGKey(config.training.seed)
 
 # ACCELERATOR
 
@@ -213,7 +210,12 @@ def main():
                 #key, subkey = jax.random.split(key)
                 #noisy_images, z = noise_scheduler.sample(timesteps, clean_images, subkey, device=accelerator.device)
 
-                noise = torch.randn_like(clean_images, device=clean_images.device)
+                if accelerator.device.type == "mps":
+
+                    noise = torch.randn_like(clean_images)
+                    noise = noise.to(clean_images.device)
+                else:
+                    noise = torch.randn_like(clean_images, device=clean_images.device)
                 # TODO (KLAUS): FIGURE OUT IF WE STORE THE PARAMTERS IN THE MODEL OR PASS THEM AROUND.
                 noisy_images = noise_scheduler.sample(timesteps, clean_images.reshape(batch_size_z,-1), noise.reshape(batch_size_z,-1),*noise_scheduler.parameters(), device=accelerator.device).reshape(clean_images.shape)
 
@@ -268,13 +270,13 @@ def main():
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
 
-            pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
+            pipeline = UTTIPipeline(accelerator.unwrap_model(unet), accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
             prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a brown and white animal with a black nose"]
             #prompts = ["0", "1", "2", "3", "4", "5"]
 
-            images = pipeline(prompts, key, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, gen_twice=bool(_epoch % 2)).images
+            images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=Noise.STANDARD_NORMAL, method=SDESolver.EULER).images
             image_grid = make_image_grid(images, rows=3,cols=4)
             accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
 

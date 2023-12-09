@@ -22,6 +22,15 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, ImagePipelineO
 
 import jax
 
+from enum import Enum, auto
+class Noise(Enum):
+    STANDARD_NORMAL = auto()
+    DISTRIBUTION = auto()
+    ZERO = auto() # zero is the same as sampling noise from the distribution right after the last time step in the reverse SDE.
+class SDESolver(Enum):
+    EULER = auto()
+
+
 class UTTIPipeline(DiffusionPipeline):
     r"""
     Pipeline for image generation.
@@ -46,14 +55,14 @@ class UTTIPipeline(DiffusionPipeline):
     def __call__(
         self,
         prompt: Union[str, List[str]],
-        key,
         device: str = "cuda",
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         num_inference_steps: int = 1000,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
-        gen_twice: bool = False,
-        gen_method: str = "euler",
+        noise: Noise = Noise.STANDARD_NORMAL,
+        method: SDESolver = SDESolver.EULER, # TODO (KLAUS) : CODE IN THE OTHER SOLVERS
+        debug: bool = False,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         The call function to the pipeline for generation.
@@ -115,13 +124,34 @@ class UTTIPipeline(DiffusionPipeline):
             )
         else:
             image_shape = (batch_size, self.unet.config.in_channels, *self.unet.config.sample_size)
+        match noise:
+            case Noise.STANDARD_NORMAL:
 
-        if self.device.type == "mps":
-            # randn does not work reproducibly on mps
-            image = randn_tensor(image_shape, generator=generator)
-            image = image.to(self.device)
-        else:
-            image = randn_tensor(image_shape, generator=generator, device=self.device)
+                if self.device.type == "mps":
+                    # randn does not work reproducibly on mps
+                    image = randn_tensor(image_shape, generator=generator)
+                    image = image.to(self.device)
+                else:
+                    image = randn_tensor(image_shape, generator=generator, device=self.device)
+            case Noise.DISTRIBUTION:
+                if self.device.type == "mps":
+                    image = torch.zeros(image_shape, device=self.device)
+                    timesteps = torch.ones((batch_size,), dtype=torch.long, device=self.device) * self.scheduler.max_variable_value
+                    # randn does not work reproducibly on mps
+                    noise = randn_tensor(image_shape, generator=generator)
+                    noise = noise.to(self.device)
+                    image = self.scheduler.sample(timesteps, image, noise, device=self.device)
+                else:
+                    image = torch.zeros(image_shape, device=self.device)
+                    timesteps = torch.ones((batch_size,), dtype=torch.long, device=self.device) * self.scheduler.max_variable_value
+                    # randn does not work reproducibly on mps
+                    noise = randn_tensor(image_shape, generator=generator, device=self.device)
+                    image = self.scheduler.sample(timesteps, image, noise, device=self.device)
+            case Noise.ZERO:
+                if self.device.type == "mps":
+                    image = torch.zeros(image_shape, device=self.device)
+                else:
+                    image = torch.zeros(image_shape, device=self.device)
 
         # set step values
         self.scheduler.set_timesteps(num_inference_steps, (1), device)
@@ -133,32 +163,25 @@ class UTTIPipeline(DiffusionPipeline):
                 model_output = self.unet(image, t, encoder_hidden_states=prompt_embeddings).sample
 
                 # 2. compute previous image: x_t -> x_t-1
-                if torch.isnan(model_output).sum() > 0 or torch.isinf(model_output).sum() > 0:
-                    print(t)
-                    print(image.max(), image.min())
-                    print("nan value or inf from model output")
-                    print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
-                    print(f"nan values in image {torch.isnan(image).sum()}")
+                if debug:
+                    if torch.isnan(model_output).sum() > 0 or torch.isinf(model_output).sum() > 0:
+                        print(t)
+                        print(image.max(), image.min())
+                        print("nan value or inf from model output")
+                        print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
+                        print(f"nan values in image {torch.isnan(image).sum()}")
                 noise = randn_tensor(image_shape, device=self.device) 
                 reverse_time_derivative =  self.scheduler.reverse_time_derivative(t.repeat(batch_size), image, noise, model_output, *self.scheduler.parameters(), device)
 
                 image = self.scheduler.step(image, reverse_time_derivative, dt)
                 
-
-                if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
-                    print(t)
-                    print("nan values in image")
+                if debug:
+                    if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
+                        print(t)
+                        print("nan values in image")
             return image
         image = denoise(image, prompt_embeddings)
-        if gen_twice and False:
-            """
-            Generate a noisy image based on the final generation and then denoise
-            """
-            timestep = torch.tensor([self.scheduler.max_variable_value]*batch_size).to(device)
-            key, subkey = jax.random.split(key)
-            image, _ = self.scheduler.sample(timestep, image, subkey, device)
-            image, key = denoise(image, prompt_embeddings, key)
-            
+       
 
 
         image = (image / 2 + 0.5).clamp(0, 1)
