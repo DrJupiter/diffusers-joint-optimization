@@ -68,7 +68,7 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         config.training.pretrained_model_or_path, cache_dir=config.training.cache_dir, revision=config.training.revision, subfolder="tokenizer"
     )
-    tokenizer = torch.compile(tokenizer)
+    #tokenizer = torch.compile(tokenizer)
 
     train_dataset, train_dataloader = get_dataset(config, tokenizer, interface="torch", accelerator=accelerator)
 
@@ -85,7 +85,7 @@ def main():
         cache_dir=config.training.cache_dir,
     )
     text_encoder.requires_grad_(False)
-    text_encoder = torch.compile(text_encoder)
+    #text_encoder = torch.compile(text_encoder)
 
     # TODO Make this a class containing the SDE and the UNET
     unet = UNet2DConditionModel(sample_size=config.training.resolution,
@@ -115,7 +115,7 @@ def main():
 #                                ),
 #                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
 #                                )
-    unet = torch.compile(unet)
+    #unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
 
