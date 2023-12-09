@@ -140,13 +140,13 @@ class UTTIPipeline(DiffusionPipeline):
                     # randn does not work reproducibly on mps
                     noise = randn_tensor(image_shape, generator=generator)
                     noise = noise.to(self.device)
-                    image = self.scheduler.sample(timesteps, image, noise, device=self.device)
+                    image = self.scheduler.sample(timesteps, image, noise, *self.scheduler.parameters(), device=self.device)
                 else:
                     image = torch.zeros(image_shape, device=self.device)
                     timesteps = torch.ones((batch_size,), dtype=torch.long, device=self.device) * self.scheduler.max_variable_value
                     # randn does not work reproducibly on mps
                     noise = randn_tensor(image_shape, generator=generator, device=self.device)
-                    image = self.scheduler.sample(timesteps, image, noise, device=self.device)
+                    image = self.scheduler.sample(timesteps, image, noise, *self.scheduler.parameters(), device=self.device)
             case Noise.ZERO:
                 if self.device.type == "mps":
                     image = torch.zeros(image_shape, device=self.device)
