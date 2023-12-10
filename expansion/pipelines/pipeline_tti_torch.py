@@ -20,15 +20,20 @@ import torch
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 
-import jax
-
 from enum import Enum, auto
 class Noise(Enum):
     STANDARD_NORMAL = auto()
     DISTRIBUTION = auto()
     ZERO = auto() # zero is the same as sampling noise from the distribution right after the last time step in the reverse SDE.
+    def __str__(self):
+        return self.name
+
 class SDESolver(Enum):
     EULER = auto()
+
+    def __str__(self) -> str:
+        return self.name
+
 
 
 class UTTIPipeline(DiffusionPipeline):
@@ -170,6 +175,7 @@ class UTTIPipeline(DiffusionPipeline):
                         print("nan value or inf from model output")
                         print(torch.isnan(model_output).sum(), torch.isinf(model_output).sum())
                         print(f"nan values in image {torch.isnan(image).sum()}")
+                        break
                 noise = randn_tensor(image_shape, device=self.device) 
                 reverse_time_derivative =  self.scheduler.reverse_time_derivative(t.repeat(batch_size), image, noise, model_output, *self.scheduler.parameters(), device)
 
@@ -179,6 +185,7 @@ class UTTIPipeline(DiffusionPipeline):
                     if torch.isnan(image).sum() > 0 or torch.isinf(image).sum() > 0:
                         print(t)
                         print("nan values in image")
+                        break
             return image
         image = denoise(image, prompt_embeddings)
        

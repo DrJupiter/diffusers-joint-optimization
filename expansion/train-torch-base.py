@@ -1,14 +1,10 @@
 import os
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 
-# LOAD JAX FOR SDE LIB IN JAX
-import jax
-import jax.numpy as jnp
-# load DNN library 
-
 import math
 from tqdm.auto import tqdm
 
+import random
 import torch
 import torch.nn.functional as F
 from accelerate import Accelerator
@@ -62,6 +58,7 @@ def main():
         project_name = log_kwargs["wandb"].pop("project")
         accelerator.init_trackers(project_name, init_kwargs=log_kwargs)
         sde_param_plots = initialize_sde_parameter_plot(config)
+        noise_types = list(Noise)
 # LOAD DATA
 
 
@@ -269,19 +266,23 @@ def main():
             update_sde_parameter_plot(sde_param_plots[0], global_step, *_log_drift_param.detach())
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
-
-            pipeline = UTTIPipeline(accelerator.unwrap_model(unet), accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
+            unwrapped_unet = accelerator.unwrap_model(unet)
+            unwrapped_unet.eval()
+            pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
             # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
             prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a brown and white animal with a black nose"]
             #prompts = ["0", "1", "2", "3", "4", "5"]
 
-            images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=Noise.STANDARD_NORMAL, method=SDESolver.EULER).images
+            noise_type = random.choice(noise_types)
+            images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
             image_grid = make_image_grid(images, rows=3,cols=4)
-            accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
+            accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
             if (global_step % 1000) == 0:
                 save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
+
+            unwrapped_unet.train()
 
     if accelerator.is_main_process: 
         pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))
