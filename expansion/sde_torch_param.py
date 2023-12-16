@@ -7,6 +7,9 @@ import jax.numpy as jnp
 import jax
 # TODO (Klaus) : Add mxin and config so we can save properly
 import torch
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.schedulers.scheduling_utils import SchedulerMixin
+
 batch_matmul = torch.vmap(torch.matmul)
 
 def jax_torch(array, requires_grad=False):
@@ -17,7 +20,7 @@ def jax_torch(array, requires_grad=False):
 def torch_jax(tensor):
     return jnp.array(tensor.numpy(force=True))
 
-class TorchSDE_PARAM(SDE_PARAM):
+class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
     def __init__(
         self,
     device: str,
@@ -107,7 +110,6 @@ class TorchSDE_PARAM(SDE_PARAM):
         return data + dt * reverse_time_derivative
 
 if __name__ == "__main__":
-    torch.nn.Parameter
     from jax import config
     config.update("jax_enable_x64", True)
     import os
