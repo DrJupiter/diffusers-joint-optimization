@@ -116,7 +116,32 @@ if __name__ == "__main__":
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
     import sympy
     from sympy import Symbol, Matrix
+    from config.config import Config
 
+    config = Config()
+    noise_scheduler = TorchSDE_PARAM(
+    device="cuda",
+    min_sample_value=config.sde.min_sample_value,
+    data_dimension=config.sde.data_dim,
+    variable=config.sde.variable,
+    drift_parameters=config.sde.drift_parameters,
+    diffusion_parameters=config.sde.diffusion_parameters,
+    drift=config.sde.drift,
+    diffusion=config.sde.diffusion,
+    diffusion_matrix=config.sde.diffusion_matrix,
+    initial_variable_value=config.sde.initial_variable_value,
+    max_variable_value=config.sde.max_variable_value,
+    module=config.sde.module,
+    model_target=config.sde.target,
+    drift_integral_form=config.sde.drift_integral_form,
+    diffusion_integral_form=config.sde.diffusion_integral_form,
+    diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
+    drift_dimension=config.sde.drift_dimension,
+    diffusion_dimension=config.sde.diffusion_dimension,
+    diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
+    )
+    import sys 
+    sys.exit(0)
     sympy.init_printing(use_unicode=True, use_latex=True)
     t = Symbol('t', nonnegative=True, real=True)
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
