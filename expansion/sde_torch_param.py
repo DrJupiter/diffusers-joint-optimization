@@ -21,6 +21,8 @@ def torch_jax(tensor):
     return jnp.array(tensor.numpy(force=True))
 
 class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
+    
+    @register_to_config
     def __init__(
         self,
     device: str,
