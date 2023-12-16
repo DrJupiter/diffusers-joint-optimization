@@ -87,7 +87,7 @@ def main():
     # TODO Make this a class containing the SDE and the UNET
     if config.training.load_pretrained_model:
 
-        UNet2DConditionModel.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", cache_dir=config.training.cache_dir)
+        unet = UNet2DConditionModel.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", cache_dir=config.training.cache_dir)
     else:
 
         unet = UNet2DConditionModel(sample_size=config.training.resolution,
