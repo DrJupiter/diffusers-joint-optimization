@@ -285,7 +285,7 @@ def main():
             image_grid = make_image_grid(images, rows=3,cols=4)
             accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
-            if (global_step % 1000) == 0:
+            if (_epoch % 100) == 0:
                 save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
 
             unwrapped_unet.train()
