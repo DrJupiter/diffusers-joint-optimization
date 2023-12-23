@@ -22,7 +22,7 @@ def torch_jax(tensor):
 
 class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
     
-    @register_to_config
+    #@register_to_config
     def __init__(
         self,
     device: str,

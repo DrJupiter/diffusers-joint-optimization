@@ -90,34 +90,34 @@ def main():
         unet = UNet2DConditionModel.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", cache_dir=config.training.cache_dir)
     else:
 
-        unet = UNet2DConditionModel(sample_size=config.training.resolution,
-                                in_channels=3,
-                                out_channels=3,
-                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-                                )
+        #unet = UNet2DConditionModel(sample_size=config.training.resolution,
+        #                        in_channels=3,
+        #                        out_channels=3,
+        #                        cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+        #                        )
 
-    #    unet = UNet2DConditionModel(sample_size=config.training.resolution,
-    #                                in_channels=3,
-    #                                out_channels=3,
-    #                                block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-    #                                down_block_types=(
-    #                                    "DownBlock2D",  # a regular ResNet downsampling block
-    #                                    "DownBlock2D",
-    #                                    "DownBlock2D",
-    #                                    "DownBlock2D",
-    #                                    "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-    #                                    "DownBlock2D",
-    #                                ),
-    #                                up_block_types=(
-    #                                    "UpBlock2D",  # a regular ResNet upsampling block
-    #                                    "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-    #                                    "UpBlock2D",
-    #                                    "UpBlock2D",
-    #                                    "UpBlock2D",
-    #                                    "UpBlock2D",
-    #                                ),
-    #                                cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-    #                                )
+        unet = UNet2DConditionModel(sample_size=config.training.resolution,
+                                    in_channels=3,
+                                    out_channels=3,
+                                    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+                                    down_block_types=(
+                                        "DownBlock2D",  # a regular ResNet downsampling block
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+                                        "DownBlock2D",
+                                    ),
+                                    up_block_types=(
+                                        "UpBlock2D",  # a regular ResNet upsampling block
+                                        "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                    ),
+                                    cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                    )
     #unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
@@ -155,6 +155,14 @@ def main():
         num_warmup_steps=config.optimizer.warmup_steps,
         num_training_steps=config.training.max_steps,
     )
+    if config.training.load_optimizer:
+        from huggingface_hub import hf_hub_download
+
+        optimizer_state = torch.load(hf_hub_download(config.training.pretrained_model_or_path, filename="optimizer.pt", revision=config.training.revision, subfolder="optimizer", cache_dir=config.training.cache_dir))
+        optimizer.load_state_dict(optimizer_state["optimizer"])
+
+        lr_scheduler_state = torch.load(hf_hub_download(config.training.pretrained_model_or_path, filename="lr_scheduler.pt", revision=config.training.revision, subfolder="lr_scheduler", cache_dir=config.training.cache_dir))
+        lr_scheduler.load_state_dict(lr_scheduler_state["lr_scheduler"])
 
 # ACCELERATE
     unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler = accelerator.prepare(unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler)
@@ -272,23 +280,26 @@ def main():
             update_sde_parameter_plot(sde_param_plots[0], global_step, *_log_drift_param.detach())
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
-            unwrapped_unet = accelerator.unwrap_model(unet)
-            unwrapped_unet.eval()
-            pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
-            # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
-            prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a brown and white animal with a black nose"]
-            #prompts = ["0", "1", "2", "3", "4", "5"]
+            if (_epoch % 10) == 0:
+                unwrapped_unet = accelerator.unwrap_model(unet)
+                unwrapped_unet.eval()
+                pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
-            noise_type = random.choice(noise_types)
-            images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
-            image_grid = make_image_grid(images, rows=3,cols=4)
-            accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
+                # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
+                prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a purple and green animal with a blue nose"]
+                #prompts = ["0", "1", "2", "3", "4", "5"]
 
-            if (_epoch % 100) == 0:
-                save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
+                noise_type = random.choice(noise_types)
+                images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
+                image_grid = make_image_grid(images, rows=3,cols=4)
+                accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
-            unwrapped_unet.train()
+                if (_epoch % 100) == 0:
+                    save_local_cloud(config, {"optimizer": accelerator.unwrap_model(optimizer).state_dict(), "lr_scheduler": accelerator.unwrap_model(lr_scheduler).state_dict()}, pipeline, interface="torch", accelerator=accelerator)
+                    #save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
+
+                unwrapped_unet.train()
 
     if accelerator.is_main_process: 
         pipeline = UTTIPipeline(accelerator.unwrap_model(unet), noise_scheduler, tokenizer, accelerator.unwrap_model(text_encoder))

@@ -9,6 +9,7 @@ from typing import List
 
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+import torch
 
 # LOGGING
 
@@ -67,6 +68,16 @@ def save_local_cloud(config: Config, params, pipeline, interface="jax", accelera
             pipeline.save_pretrained(
                 config.training.save_dir
             )
+            if params is not None:
+                
+                optimizer_state = params.pop("optimizer", None)
+                if optimizer_state is not None:
+                    os.makedirs(os.path.join(config.training.save_dir, "optimizer"), exist_ok=True)
+                    torch.save({"optimizer": optimizer_state}, os.path.join(config.training.save_dir, "optimizer/optimizer.pt"))
+                lr_scheduler_state = params.pop("lr_scheduler", None)
+                if lr_scheduler_state is not None:
+                    os.makedirs(os.path.join(config.training.save_dir, "lr_scheduler"), exist_ok=True)
+                    torch.save({"lr_scheduler": lr_scheduler_state}, os.path.join(config.training.save_dir, "lr_scheduler/lr_scheduler.pt"))
 
         if config.training.push_to_hub:
             upload_folder(

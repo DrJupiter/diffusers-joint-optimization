@@ -51,19 +51,20 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 64
+    batch_size = 40
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
     max_steps = None
     epochs = 1000 
 
-    save_dir = "pokemon-test-tti"
+    save_dir = "pokemon-test"
     push_to_hub = True
-    pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
     load_pretrained_model = True # True -> load pretrained unet, False -> Train unet from scratch.
+    load_optimizer = True # True -> load optimizer, False -> Train optimizer from scratch.
 
 @dataclass
 class OptimizerConfig:
