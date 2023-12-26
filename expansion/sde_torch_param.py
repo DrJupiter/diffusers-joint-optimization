@@ -121,10 +121,13 @@ if __name__ == "__main__":
     from config.config import Config
 
     config = Config()
+
+    data_dimension = 4
+
     noise_scheduler = TorchSDE_PARAM(
     device="cuda",
     min_sample_value=config.sde.min_sample_value,
-    data_dimension=config.sde.data_dim,
+    data_dimension=data_dimension, #
     variable=config.sde.variable,
     drift_parameters=config.sde.drift_parameters,
     diffusion_parameters=config.sde.diffusion_parameters,
@@ -142,64 +145,30 @@ if __name__ == "__main__":
     diffusion_dimension=config.sde.diffusion_dimension,
     diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
     )
-    import sys 
-    sys.exit(0)
-    sympy.init_printing(use_unicode=True, use_latex=True)
-    t = Symbol('t', nonnegative=True, real=True)
-    x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
-    drift_param = Matrix([x1,x2,x3])
-    diffusion_param = Matrix([x4,x5])
-
-    drift_param = Matrix([x1,x2,x3])
-    diffusion_param = Matrix([x4,x5])
-    #drift_param = diffusion_param = sympy.symbols("∅", real=True)
-
-    v_drift_param =  jnp.array([1.,1.,1.])
-    v_diffusion_param =  jnp.array([4.,4.])
-    print(v_drift_param.shape)
-    #v_drift_param = v_diffusion_param = jnp.array([None])
-
-    n = 4 # dims of problem
+    
     timesteps = jnp.array([0.1, 0.4])
-    x0 = jnp.ones((len(timesteps), n))*1/2
+    x0 = jnp.ones((len(timesteps), data_dimension))*1/2
 
 
     z = jax.random.normal(jax.random.PRNGKey(0), x0.shape)
     #z = jnp.array([[ 0.08086788, -0.38624702, -0.37565558,  1.66897423]])
     print(z)
-    F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) # n x n, but to use as diagonal then do 1 x n, 1 x 1 
 
-
-    Q = Matrix.eye(n)
     # Normal test
 
     timesteps = jax_torch(timesteps)
     z = jax_torch(z)
     x0 = jax_torch(x0)
-    v_drift_param =  jax_torch(v_drift_param, requires_grad=True)
-    v_diffusion_param =  jax_torch(v_diffusion_param, requires_grad=True)
     model_output = torch.ones_like(x0) 
+
     torch.set_printoptions(precision=8)
-    sde = TorchSDE_PARAM(1e-3, n, t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
     #sde.initialize_parameters(v_drift_param, v_diffusion_param)
-    sde.initialize_parameters()
-    print(sde.parameters())
-    optimizer = torch.optim.SGD(sde.parameters(), lr=1, momentum=0.99)
 
     #samples = sde.sample(timesteps, x0, z, v_drift_param , v_diffusion_param)
     #print(samples)
 
-    samples = sde.sample(timesteps, x0, z, *sde.parameters(), device="cuda")
-    print(samples)
-    samples.sum().backward()
-    optimizer.step()
-    optimizer.zero_grad()
-    print(sde.parameters())
-
     #print(samples.sum().backward(), type(samples))
-    torch.autograd.gradcheck(lambda param, param2: sde.sample(timesteps, x0, z, param, param2), (v_drift_param, v_diffusion_param)) 
-    print(sde.reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param, device="cuda") )
+    torch.autograd.gradcheck(lambda param, param2: noise_scheduler.sample(timesteps, x0, z, param, param2), noise_scheduler.parameters()) 
     
 
 """ 
