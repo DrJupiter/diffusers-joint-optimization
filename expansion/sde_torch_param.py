@@ -114,6 +114,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
 if __name__ == "__main__":
     from jax import config
     config.update("jax_enable_x64", True)
+    torch.set_default_dtype(torch.float64)
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
     import sympy
