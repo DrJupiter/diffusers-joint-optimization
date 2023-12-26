@@ -112,11 +112,11 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         return data + dt * reverse_time_derivative
 
 if __name__ == "__main__":
+    import os
+    os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
     from jax import config
     config.update("jax_enable_x64", True)
     torch.set_default_dtype(torch.float64)
-    import os
-    os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
     import sympy
     from sympy import Symbol, Matrix
     from config.config import Config
