@@ -77,9 +77,9 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         return [self.tensor_drift_parameters, self.tensor_diffusion_parameters]
 
     def sample(self, *args, device="cuda", **kwargs):
-        return self.get_gradient_function().apply(*args, **kwargs).to(device)
+        return self.get_sample_gradient_function().apply(*args, **kwargs).to(device)
 
-    def get_gradient_function(self):
+    def get_sample_gradient_function(self):
 
         class TorchSDE_PARAM_F(torch.autograd.Function):
 

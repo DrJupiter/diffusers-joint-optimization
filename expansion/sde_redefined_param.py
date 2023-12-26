@@ -246,6 +246,7 @@ class SDE_PARAM:
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
         symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
+        symbolic_mean = self.symbolic_mean().subs({self.data_dim: data_dimension})
         print(f"{symbolic_sample.shape=}")
 
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
@@ -264,20 +265,37 @@ class SDE_PARAM:
 
         # REVERSE TIME DERIVATIVE
         lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module)
+        
+        # NORMALIZING FACTORS FOR LOSS
+        lambdified_mean = lambdify([self.variable, symbolic_input, self.drift_parameters], symbolic_mean , self.module)
+
+        # DERIVATIVE OF NORMALIZING FACTORS w.r.t DRIFT and DIFFUSION
+        lambdified_mean_drift_derivative = lambdify([self.variable, symbolic_input, self.drift_parameters], symbolic_mean.diff(self.drift_parameters), self.module)
 
         # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
         if self.module == "jax":
+            # SAMPLE
+            self.lambdified_sample = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_sample(t, data, noise, drift, diffusion))
             self.lambdified_drift_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_drift_derivative(t, data, noise, drift, diffusion)).T 
             self.lambdified_diffusion_derivative = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_diffusion_derivative(t, data, noise, drift, diffusion)).T 
-            self.lambdified_sample = lambda t, data, noise, drift, diffusion: jnp.squeeze(lambdified_sample(t, data, noise, drift, diffusion))
+
+            # REVERSE SAMPLE
             self.lambdified_reverse_time_derivative = lambda t, data, noise, model, drift, diffusion: jnp.squeeze(lambdified_reverse_time_derivative(t, data, noise, model, drift, diffusion))
 
+            # NORMALIZE
+            self.lambdified_mean = lambda t, data, drift: jnp.squeeze(lambdified_mean(t, data, drift))
+            self.lambdified_mean_drift_derivative = lambda t, data, drift: jnp.squeeze(lambdified_mean_drift_derivative(t, data, drift)).T
+
         else:
+            self.lambdified_sample = lambdified_sample
             self.lambdified_drift_derivative = lambdified_drift_derivative
             self.lambdified_diffusion_derivative = lambdified_diffusion_derivative
             print("derivatives haven't been converted to numerator layout. Consider if this is relevant for your use case. Otherwise squeeze and transpose the output to achieve this.")
 
             self.lambdified_reverse_time_derivative = lambdified_reverse_time_derivative
+
+            self.lambdified_mean = lambdified_mean
+            self.lambdified_mean_drift_derivative = lambdified_mean_drift_derivative
 
 
         if self.module == "jax":
@@ -286,6 +304,9 @@ class SDE_PARAM:
             self.v_lambdified_drift_derivative = jax.vmap(self.lambdified_drift_derivative, (0, 0, 0, None, None))
             self.v_lambdified_diffusion_derivative = jax.vmap(self.lambdified_diffusion_derivative, (0, 0, 0, None, None))
             self.v_lambdified_reverse_time_derivative = jax.vmap(self.lambdified_reverse_time_derivative, (0, 0, 0, 0, None, None))
+
+            self.v_lambdified_mean = jax.vmap(self.lambdified_mean, (0, 0, None))
+            self.v_lambdified_mean_drift_derivative = jax.vmap(self.lambdified_mean_drift_derivative, (0, 0, None))
 
     def symbolic_sample(self):
         """
