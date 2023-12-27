@@ -9,6 +9,7 @@ import jax
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
+from transformers import set_seed
 
 batch_matmul = torch.vmap(torch.matmul)
 
@@ -81,7 +82,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
 
     def get_sample_gradient_function(self):
 
-        class TorchSDE_PARAM_F(torch.autograd.Function):
+        class TorchSDE_PARAM_SAMPLE(torch.autograd.Function):
 
             @staticmethod
             def forward(*args: Any, **kwargs: Any) -> Any:
@@ -99,7 +100,33 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
                 return None, None, None, batch_matmul(grad_output , jax_torch(self.v_lambdified_drift_derivative(*tensors))).to(self.device), batch_matmul(grad_output , jax_torch(self.v_lambdified_diffusion_derivative(*tensors))).to(self.device)
                 #return super().backward(ctx, *grad_outputs)
 
-        return TorchSDE_PARAM_F
+        return TorchSDE_PARAM_SAMPLE
+
+    def mean(self, *args, device="cuda", **kwargs):
+        return self.get_mean_gradient_function().apply(*args, **kwargs).to(device)
+
+    def get_mean_gradient_function(self):
+
+        class TorchSDE_PARAM_MEAN(torch.autograd.Function):
+
+            @staticmethod
+            def forward(*args: Any, **kwargs: Any) -> Any:
+                return jax_torch(self.v_lambdified_mean(*[torch_jax(arg) for arg in args], **kwargs), requires_grad=True)
+
+            @staticmethod 
+            def setup_context(ctx: Any, inputs: Tuple[Any, ...], output: Any) -> Any:
+                #t, data, drift= inputs
+                ctx.save_for_backward(*inputs)
+                #return super().setup_context(ctx, inputs, output) 
+            
+            @staticmethod
+            def backward(ctx: Any, grad_output) -> Any:
+                tensors = [torch_jax(tensor) for tensor in ctx.saved_tensors]
+                return None, None, batch_matmul(grad_output , jax_torch(self.v_lambdified_mean_drift_derivative(*tensors))).to(self.device) 
+                #return super().backward(ctx, *grad_outputs)
+
+        return TorchSDE_PARAM_MEAN
+
     def set_timesteps(self, num_inference_steps, batch_size, device):
         self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device).repeat(batch_size)
     
@@ -114,6 +141,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
 if __name__ == "__main__":
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
+
     from jax import config
     config.update("jax_enable_x64", True)
     torch.set_default_dtype(torch.float64)
@@ -122,6 +150,7 @@ if __name__ == "__main__":
     from config.config import Config
 
     config = Config()
+    set_seed(config.training.seed)
 
     data_dimension = 4
 
@@ -160,7 +189,6 @@ if __name__ == "__main__":
     timesteps = jax_torch(timesteps)
     z = jax_torch(z)
     x0 = jax_torch(x0)
-    model_output = torch.ones_like(x0) 
 
     torch.set_printoptions(precision=8)
     #sde.initialize_parameters(v_drift_param, v_diffusion_param)
@@ -168,61 +196,29 @@ if __name__ == "__main__":
     #samples = sde.sample(timesteps, x0, z, v_drift_param , v_diffusion_param)
     #print(samples)
 
-    #print(samples.sum().backward(), type(samples))
+    # TEST GRADIENTS
     torch.autograd.gradcheck(lambda param, param2: noise_scheduler.sample(timesteps, x0, z, param, param2), noise_scheduler.parameters()) 
+    torch.autograd.gradcheck(lambda param: noise_scheduler.mean(timesteps, x0, param), noise_scheduler.parameters()[0])
+
+    # TEST UPDATE
+    model_output = torch.ones_like(x0, device='cuda') 
+    print(noise_scheduler.parameters())
+    optimizer = torch.optim.SGD(noise_scheduler.parameters(), lr = 0.1, momentum=0.9)
+
+    samples = noise_scheduler.sample(timesteps, x0, z, *noise_scheduler.parameters())
+    diff = model_output-samples
+    mean_matrix = noise_scheduler.mean(timesteps, x0, noise_scheduler.parameters()[0])
+    print(batch_matmul(diff, diff))
+    I = torch.stack([torch.eye(data_dimension)]*2).cuda()+1
+    print(batch_matmul(diff,batch_matmul(I, diff)))
+    I2 = torch.eye(data_dimension).cuda()+1
+    print(batch_matmul(diff, diff @ I2))
     
+    #print(batch_matmul(diff, diff @ I).sum())
+    print(torch.nn.functional.mse_loss(model_output, samples, reduction='sum'))
+    loss = torch.mean(batch_matmul(diff, diff * mean_matrix))
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
 
-""" 
-class TorchSDE(SDE_PARAM):
-
-    def __init__(self, variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, data_dimension, initial_variable_value = 0., max_variable_value = math.inf, min_sample_value=1e-4, module='jax', model_target="epsilon", drift_integral_form = False, diffusion_integral_form = False, diffusion_integral_decomposition = 'cholesky', drift_diagonal_form = True, diffusion_diagonal_form = True, diffusion_matrix_diagonal_form = True):
-        super().__init__(variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, model_target, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_diagonal_form, diffusion_diagonal_form, diffusion_matrix_diagonal_form)
-        
-        self.min_sample_value = min_sample_value
-
-        # Initialize the sde for some generation task
-        self.lambdify_symbolic_functions(data_dimension)
-
-    def sample(self, timestep, initial_data, noise, drift_parameters, diffusion_parameters, device="cuda"):
-        batch_size = timestep.shape[0]
-        original_shape = initial_data.shape
-        jax_timestep = jnp.array(timestep.reshape(-1).numpy(force=True))
-        jax_initial_data = jnp.array(initial_data.reshape(batch_size, -1).numpy(force=True))
-        jax_noise = jnp.array(noise.reshape(batch_size, -1).numpy(force=True))
-
-        jax_drift_parameters = jnp.array(drift_parameters.numpy(force=True))
-        jax_diffusion_parameters = jnp.array(diffusion_parameters.numpy(force=True))
-        sample = self.v_lambdified_sample(jax_timestep, jax_initial_data, jax_noise, jax_drift_parameters, jax_diffusion_parameters)
-        return torch.from_numpy(np.array(sample.reshape(original_shape))).to(device)
-
-    # TODO (KLAUS): REMOVE LEGACY SAMPLE AFTER REFACTOR
-    #def sample(self, timestep, initial_data, key, device='cuda'):
-
-    #    # TODO (TECHNICALLY) there is no need to not take in a jax numpy array and then at the final step convert it to a tensor.
-    #    batch_size = timestep.shape[0]
-    #    original_shape = initial_data.shape
-    #    jax_timestep = jnp.array(timestep.reshape(-1).numpy(force=True))
-    #    jax_initial_data = jnp.array(initial_data.reshape(batch_size, -1).numpy(force=True))
-
-    #    noisy_data, noise = super().sample(jax_timestep, jax_initial_data, key)
-    #    return torch.from_numpy(np.array(noisy_data.reshape(original_shape))).to(device), torch.from_numpy(np.array(noise.reshape(original_shape))).to(device) 
-    
-    def set_timesteps(self,num_inference_steps, device):
-        self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device)
-
-    def step(self, model_output, timestep, data, key, dt, device='cuda'):
-
-        batch_size = data.shape[0]
-        original_shape = data.shape
-        
-        jax_model_output = jnp.array(model_output.reshape(batch_size, -1).numpy(force=True))
-        jax_data = jnp.array(data.reshape(batch_size, -1).numpy(force=True))
-        jax_timestep = timestep.reshape(-1).numpy(force=True)
-        if len(timestep.shape) in [0,1]:
-            jax_timestep = jnp.array(jax_timestep.repeat(batch_size)).reshape(-1)
-        else:
-            jax_timestep = jnp.array(jax_timestep)
-
-        next_sample, sample_derivative, key = super().step(jax_model_output, jax_timestep, jax_data, key, dt)
-        return torch.from_numpy(np.array(next_sample.reshape(original_shape))).to(device), torch.from_numpy(np.array(sample_derivative.reshape(original_shape))).to(device), key
-"""
+    print(noise_scheduler.parameters())

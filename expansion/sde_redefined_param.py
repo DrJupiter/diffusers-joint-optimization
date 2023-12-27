@@ -12,6 +12,13 @@ batch_matrix_vec = jax.vmap(lambda M, v: M @ v)
 """
 from enum import Enum, auto
 
+def matrix_diagonal_product(matrix, diagonal):
+    return Matrix(list(map(lambda x: x[0] * x[1], zip([matrix[:,i] for i in range(matrix.shape[0])],diagonal)))).reshape(*matrix.shape).transpose()
+
+def simple_squeeze(arr):
+    new_shape = tuple(dim for dim in arr.shape if dim != 1)
+    return arr.reshape(*new_shape)
+
 class SDEDimension(Enum):
     SCALAR   = auto()
     DIAGONAL = auto()
@@ -237,21 +244,51 @@ class SDE_PARAM:
 
         self.symbolic_model = sympy.MatrixSymbol("s", self.batch_dim, self.data_dim)
 
+        self.symbolic_target = sympy.MatrixSymbol("e", self.batch_dim, self.data_dim)
+
     def lambdify_symbolic_functions(self, data_dimension):
         """
         Initialize The functions calculated symbolically for a specific data dimension,
         so they can be called within the specifc module
         """
-
+        self.symbolic_scaled_loss()
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
         symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
-        symbolic_mean = self.symbolic_mean().subs({self.data_dim: data_dimension})
-        print(f"{symbolic_sample.shape=}")
+
 
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
         symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
+
+
+        # For some reason sympy's diff engine will fail if we don't do this:
+        #match (self.drift.dimension, self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
+        #    case (SDEDimension.FULL,SDEDimension.FULL,SDEDimension.FULL):
+        #        symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
+        #        symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
+        #    case (_,_,_):
+        #        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
+        #        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
+
+        symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
+        symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
+
+        symbolic_loss = self.symbolic_scaled_loss().subs({self.symbolic_model: symbolic_model, self.symbolic_target: symbolic_target}).subs({self.data_dim: data_dimension}).doit()
+        # SCALED LOSS
+        lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
+
+        # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
+        scaled_loss_derivative_model = simple_squeeze(sympy.simplify(symbolic_loss.diff(symbolic_model)))
+
+        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], scaled_loss_derivative_model, self.module)
+        lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module)
+        lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module)
+
         symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
+        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
+        print(f"{symbolic_sample.shape=}, {symbolic_loss.shape=}")
+
+
 
         # SAMPLE
         lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
@@ -266,12 +303,6 @@ class SDE_PARAM:
         # REVERSE TIME DERIVATIVE
         lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module)
         
-        # NORMALIZING FACTORS FOR LOSS
-        lambdified_mean = lambdify([self.variable, symbolic_input, self.drift_parameters], symbolic_mean , self.module)
-
-        # DERIVATIVE OF NORMALIZING FACTORS w.r.t DRIFT and DIFFUSION
-        lambdified_mean_drift_derivative = lambdify([self.variable, symbolic_input, self.drift_parameters], symbolic_mean.diff(self.drift_parameters), self.module)
-
         # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
         if self.module == "jax":
             # SAMPLE
@@ -283,8 +314,10 @@ class SDE_PARAM:
             self.lambdified_reverse_time_derivative = lambda t, data, noise, model, drift, diffusion: jnp.squeeze(lambdified_reverse_time_derivative(t, data, noise, model, drift, diffusion))
 
             # NORMALIZE
-            self.lambdified_mean = lambda t, data, drift: jnp.squeeze(lambdified_mean(t, data, drift))
-            self.lambdified_mean_drift_derivative = lambda t, data, drift: jnp.squeeze(lambdified_mean_drift_derivative(t, data, drift)).T
+            self.lambdified_scaled_loss = lambda t, target, model, drift, diffusion : jnp.squeeze(lambdified_scaled_loss(t, target, model, drift, diffusion))   
+            self.lambdified_scaled_loss_derivative_model = lambda t, target, model, drift, diffusion : jnp.squeeze(lambdified_scaled_loss_derivative_model(t, target, model, drift, diffusion)).T   
+            self.lambdified_scaled_loss_derivative_drift = lambda t, target, model, drift, diffusion : jnp.squeeze(lambdified_scaled_loss_derivative_drift(t, target, model, drift, diffusion)).T      
+            self.lambdified_scaled_loss_derivative_diffusion = lambda t, target, model, drift, diffusion : jnp.squeeze(lambdified_scaled_loss_derivative_diffusion(t, target, model, drift, diffusion)).T      
 
         else:
             self.lambdified_sample = lambdified_sample
@@ -294,9 +327,6 @@ class SDE_PARAM:
 
             self.lambdified_reverse_time_derivative = lambdified_reverse_time_derivative
 
-            self.lambdified_mean = lambdified_mean
-            self.lambdified_mean_drift_derivative = lambdified_mean_drift_derivative
-
 
         if self.module == "jax":
             # TODO (KLAUS): HOPEFULLY WE CAN JUST USE THIS IN THE TORCH CASE, WE HAVE TO CHECK IF IT WILL ALLOW US TO LAMBIDIFY
@@ -305,8 +335,13 @@ class SDE_PARAM:
             self.v_lambdified_diffusion_derivative = jax.vmap(self.lambdified_diffusion_derivative, (0, 0, 0, None, None))
             self.v_lambdified_reverse_time_derivative = jax.vmap(self.lambdified_reverse_time_derivative, (0, 0, 0, 0, None, None))
 
-            self.v_lambdified_mean = jax.vmap(self.lambdified_mean, (0, 0, None))
-            self.v_lambdified_mean_drift_derivative = jax.vmap(self.lambdified_mean_drift_derivative, (0, 0, None))
+            # t, target, model, drift, diffusion
+            self.v_lambdified_scaled_loss = jax.vmap(self.lambdified_scaled_loss, (0, 0, 0, None, None) ) 
+            self.v_lambdified_scaled_loss_derivative_model = jax.vmap(self.lambdified_scaled_loss_derivative_model, (0, 0, 0, None, None)) 
+            self.v_lambdified_scaled_loss_derivative_drift = jax.vmap(self.lambdified_scaled_loss_derivative_drift, (0, 0, 0, None, None)) 
+            self.v_lambdified_scaled_loss_derivative_diffusion = jax.vmap(self.lambdified_scaled_loss_derivative_diffusion, (0, 0, 0, None, None)) 
+            
+
 
     def symbolic_sample(self):
         """
@@ -333,6 +368,54 @@ class SDE_PARAM:
 
 
         return mean + decomposition_product 
+
+
+    def symbolic_scaled_loss(self):
+        
+
+        exp_F = self.drift.symbolic_solution_matrix
+        inv_A = self.diffusion.symbolic_inv_decomposition
+
+        difference = self.symbolic_target - self.symbolic_model
+        # DIMENSION OF A
+        match (self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
+            case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
+                inv_decomposition_dimension = SDEDimension.FULL
+            case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
+                inv_decomposition_dimension = SDEDimension.DIAGONAL
+            case (SDEDimension.SCALAR, SDEDimension.SCALAR):
+                inv_decomposition_dimension = SDEDimension.SCALAR
+        
+        match (self.drift.dimension, inv_decomposition_dimension):
+
+            case (SDEDimension.SCALAR, _) | (_, SDEDimension.SCALAR):
+                scale = exp_F * inv_A
+                loss = difference * scale @ difference.T 
+            case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
+                scale = sympy.HadamardProduct(exp_F, inv_A)
+                loss = sympy.MatMul(difference, sympy.HadamardProduct(difference, scale).T) 
+            case (SDEDimension.FULL, SDEDimension.DIAGONAL):
+                scale = matrix_diagonal_product(exp_F, inv_A)
+                loss = difference @ scale @ difference.T
+            case (SDEDimension.DIAGONAL, SDEDimension.FULL):
+                scale = matrix_diagonal_product(inv_A, exp_F)
+                loss = difference @ scale @ difference.T
+            case (SDEDimension.FULL, SDEDimension.FULL):
+                scale = inv_A @ exp_F
+                loss = difference @ scale @ difference.T
+
+        return loss
+                
+        # 
+        #match (self.drift.dimension, inv_decomposition_dimension):
+
+        #    case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
+        #         
+        #    case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
+        #        
+        #    case (SDEDimension.SCALAR, SDEDimension.SCALAR):
+                
+        
 
     def symbolic_mean(self):
         """
@@ -508,16 +591,30 @@ if __name__ == "__main__":
     #print(F.shape, S_F.shape, S_L.shape, S_Q.shape)
     outputs = []
     integral_outputs = []
+    #----
 
     diffusion_derivatives = []
     integral_diffusion_derivatives = []
+    #----
 
     drift_derivatives = []
     integral_drift_derivatives = []
+    #----
 
     reverse_time_derivatives = [] 
     integral_reverse_time_derivatives = [] 
+    #----
 
+    scaled_loss = []
+    scaled_loss_model_derivative = []
+    scaled_loss_drift_derivative = []
+    scaled_loss_diffusion_derivative = []
+
+    integral_scaled_loss = []
+    integral_scaled_loss_model_derivative = []
+    integral_scaled_loss_drift_derivative = []
+    integral_scaled_loss_diffusion_derivative = []
+    #----
 
     sde = SDE_PARAM(t, drift_param, diffusion_param, S_F, S_L, S_Q, drift_dimension=SDEDimension.SCALAR, diffusion_dimension=SDEDimension.SCALAR, diffusion_matrix_dimension=SDEDimension.SCALAR)
     sde.lambdify_symbolic_functions(n)
@@ -528,6 +625,11 @@ if __name__ == "__main__":
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
+    scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+
     sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL)
     sde.lambdify_symbolic_functions(n)
 
@@ -536,6 +638,11 @@ if __name__ == "__main__":
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
+
+    scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
     
     # Integral test
     sde = SDE_PARAM(t, drift_param, diffusion_param, F, L, Q, drift_dimension=SDEDimension.FULL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.FULL,
@@ -546,6 +653,12 @@ if __name__ == "__main__":
     integral_drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     integral_reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
+
+    integral_scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+
     # Diagonal tests
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q.diagonal(), drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.DIAGONAL, diffusion_matrix_dimension=SDEDimension.DIAGONAL)
     sde.lambdify_symbolic_functions(n)
@@ -555,6 +668,11 @@ if __name__ == "__main__":
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
     
 
+    scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L, Q.diagonal(),drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.FULL, diffusion_matrix_dimension=SDEDimension.DIAGONAL)
     sde.lambdify_symbolic_functions(n)
 
@@ -563,6 +681,11 @@ if __name__ == "__main__":
     drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
+
+    scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
 
 
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q,drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.DIAGONAL, diffusion_matrix_dimension=SDEDimension.FULL)
@@ -574,6 +697,11 @@ if __name__ == "__main__":
     reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
 
 
+    scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+
 
     # Diagonal Integral tests
     sde = SDE_PARAM(t, drift_param, diffusion_param, F.diagonal(), L.diagonal(), Q.diagonal(), drift_dimension=SDEDimension.DIAGONAL, diffusion_dimension=SDEDimension.DIAGONAL, diffusion_matrix_dimension=SDEDimension.DIAGONAL, diffusion_integral_form=True, drift_integral_form=True)
@@ -583,6 +711,12 @@ if __name__ == "__main__":
     integral_diffusion_derivatives.append(sde.v_lambdified_diffusion_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     integral_drift_derivatives.append(sde.v_lambdified_drift_derivative(timesteps, x0, z, v_drift_param, v_diffusion_param))
     integral_reverse_time_derivatives.append(sde.v_lambdified_reverse_time_derivative(timesteps, x0, z, model_output, v_drift_param, v_diffusion_param))
+
+
+    integral_scaled_loss.append(sde.v_lambdified_scaled_loss(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_model_derivative.append(sde.v_lambdified_scaled_loss_derivative_model(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_drift_derivative.append(sde.v_lambdified_scaled_loss_derivative_drift(timesteps, z, model_output, v_drift_param, v_diffusion_param))
+    integral_scaled_loss_diffusion_derivative.append(sde.v_lambdified_scaled_loss_derivative_diffusion(timesteps, z, model_output, v_drift_param, v_diffusion_param))
 
     from test.utils import test_arrays_equal
     test_arrays_equal(outputs, "Regular") 
@@ -594,6 +728,15 @@ if __name__ == "__main__":
     test_arrays_equal(integral_drift_derivatives, "Integral Drift Derivative") 
     test_arrays_equal(integral_reverse_time_derivatives, "Integral Reverse Time Derivative") 
 
+    test_arrays_equal(scaled_loss, "Scaled Loss")
+    test_arrays_equal(scaled_loss_model_derivative ,"Scaled Loss Model Derivative") 
+    test_arrays_equal(scaled_loss_drift_derivative, "Scaled Loss Drift Derivative")
+    test_arrays_equal(scaled_loss_diffusion_derivative, "Scaled Loss Diffusion Derivative")
+
+    test_arrays_equal(integral_scaled_loss, "Integral Scaled Loss")
+    test_arrays_equal(integral_scaled_loss_model_derivative, "Integral Scaled Loss Model Derivative")
+    test_arrays_equal(integral_scaled_loss_drift_derivative, "Integral Scaled Loss Drift Derivative")
+    test_arrays_equal(integral_scaled_loss_diffusion_derivative, "Integral Scaled Loss Diffusion Derivative")
 
 
 
