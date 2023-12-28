@@ -12,6 +12,7 @@ from diffusers.schedulers.scheduling_utils import SchedulerMixin
 from transformers import set_seed
 
 batch_matmul = torch.vmap(torch.matmul)
+batch_mul    = torch.vmap(torch.mul)
 
 def jax_torch(array, requires_grad=False):
     array = torch.from_numpy(np.array(array))
@@ -122,7 +123,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             @staticmethod
             def backward(ctx: Any, grad_output) -> Any:
                 tensors = [torch_jax(tensor) for tensor in ctx.saved_tensors]
-                return None, None, batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_model(*tensors))).to(self.device), batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_drift(*tensors))).to(self.device), batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_diffusion(*tensors))).to(self.device) 
+                return None, None, batch_mul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_model(*tensors))).to(self.device), batch_mul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_drift(*tensors))).to(self.device), batch_mul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_diffusion(*tensors))).to(self.device) 
                 #return super().backward(ctx, *grad_outputs)
 
         return TorchSDE_PARAM_SCALED_LOSS
@@ -189,7 +190,8 @@ if __name__ == "__main__":
     timesteps = jax_torch(timesteps)
     z = jax_torch(z)
     x0 = jax_torch(x0)
-    model_output = torch.ones_like(x0, device='cuda', requires_grad=True)
+    model_output = torch.randn_like(x0, device='cuda', requires_grad=True)
+
 
     torch.set_printoptions(precision=8)
     #sde.initialize_parameters(v_drift_param, v_diffusion_param)
@@ -199,7 +201,7 @@ if __name__ == "__main__":
 
     # TEST GRADIENTS
     torch.autograd.gradcheck(lambda param, param2: noise_scheduler.sample(timesteps, x0, z, param, param2), noise_scheduler.parameters()) 
-    torch.autograd.gradcheck(lambda model, drift, diffusion: noise_scheduler.scaled_loss(timesteps, x0, model, drift, diffusion), (model_output,*noise_scheduler.parameters(),))
+    torch.autograd.gradcheck(lambda model, drift, diffusion: noise_scheduler.scaled_loss(timesteps, z, model, drift, diffusion), (model_output,*noise_scheduler.parameters(),))
 
 
     import sys
