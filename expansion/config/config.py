@@ -51,7 +51,7 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 40
+    batch_size = 32
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
@@ -99,7 +99,6 @@ class SDEConfig:
     drift_dimension = SDEDimension.SCALAR 
     diffusion_dimension = SDEDimension.SCALAR
     diffusion_matrix_dimension = SDEDimension.SCALAR 
-    n = 1 # n = 1 -> a scalar matrix
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
     drift_parameters = Matrix([sympy.symbols("f1")])
