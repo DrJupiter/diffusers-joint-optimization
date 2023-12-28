@@ -391,7 +391,7 @@ class SDE_PARAM:
             case (SDEDimension.SCALAR, _) | (_, SDEDimension.SCALAR):
                 # Probably something here
                 scale = exp_F * inv_A
-                loss = difference @ (scale * difference.T)
+                loss = (difference @ scale @ difference.T).expand() 
             case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
                 scale = sympy.HadamardProduct(exp_F, inv_A)
                 loss = sympy.MatMul(difference, sympy.HadamardProduct(difference, scale).T) 
