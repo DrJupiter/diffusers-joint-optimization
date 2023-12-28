@@ -12,7 +12,7 @@ def test_arrays_equal(arrays: List[jnp.array], msg: Union[None , str] = None):
             almost_equal = True
             equal = False
         else:
-            raise AssertionError(f"{arrays[i]} != or ~= {arrays[i+1]}")
+            raise AssertionError(f"Array {i} : {arrays[i]} != or ~= Array {i+1} : {arrays[i+1]}")
     if equal:
         print(f"The {msg} arrays are equal")
     elif almost_equal:

@@ -251,7 +251,6 @@ class SDE_PARAM:
         Initialize The functions calculated symbolically for a specific data dimension,
         so they can be called within the specifc module
         """
-        self.symbolic_scaled_loss()
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
         symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
@@ -279,6 +278,7 @@ class SDE_PARAM:
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
         scaled_loss_derivative_model = simple_squeeze(sympy.simplify(symbolic_loss.diff(symbolic_model)))
+        print(scaled_loss_derivative_model)
 
         lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], scaled_loss_derivative_model, self.module)
         lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module)
@@ -389,8 +389,9 @@ class SDE_PARAM:
         match (self.drift.dimension, inv_decomposition_dimension):
 
             case (SDEDimension.SCALAR, _) | (_, SDEDimension.SCALAR):
+                # Probably something here
                 scale = exp_F * inv_A
-                loss = difference * scale @ difference.T 
+                loss = difference @ (scale * difference.T)
             case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
                 scale = sympy.HadamardProduct(exp_F, inv_A)
                 loss = sympy.MatMul(difference, sympy.HadamardProduct(difference, scale).T) 
@@ -401,7 +402,7 @@ class SDE_PARAM:
                 scale = matrix_diagonal_product(inv_A, exp_F)
                 loss = difference @ scale @ difference.T
             case (SDEDimension.FULL, SDEDimension.FULL):
-                scale = inv_A @ exp_F
+                scale = exp_F @ inv_A
                 loss = difference @ scale @ difference.T
 
         return loss
@@ -571,18 +572,13 @@ if __name__ == "__main__":
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
     F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) # n x n, but to use as diagonal then do 1 x n, 1 x 1 
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) 
+    Q = Matrix.eye(n)
 
     drift_dimension = SDEDimension.FULL
     drift_dimension = SDEDimension.DIAGONAL
     drift_dimension = SDEDimension.SCALAR
 
-    #F = Matrix.diag([[sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]],[t*drift_param[2]], [t]])
-    #L = Matrix.diag([[sympy.sin(t)*diffusion_param[0]+diffusion_param[1]],[t * diffusion_param[1] ], [t]])
-    #F = Matrix.diag([t]*n)
-    #L = Matrix.diag([t]*n)
-    Q = Matrix.eye(n)
-    # Normal test
 
     S_F = sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]
     S_L = sympy.sin(t)*diffusion_param[0]+diffusion_param[1]
@@ -737,28 +733,3 @@ if __name__ == "__main__":
     test_arrays_equal(integral_scaled_loss_model_derivative, "Integral Scaled Loss Model Derivative")
     test_arrays_equal(integral_scaled_loss_drift_derivative, "Integral Scaled Loss Drift Derivative")
     test_arrays_equal(integral_scaled_loss_diffusion_derivative, "Integral Scaled Loss Diffusion Derivative")
-
-
-
-#    import timeit 
-#    t0 = timeit.time.time() 
-#    sde = SDE(t, Matrix([[1/(t+1)]*435580]), Matrix([[t]*435580]), Matrix([[1]*435580]), drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
-#    t1 = timeit.time.time()
-#    print(t1-t0)
-#
-#    t0 = timeit.time.time()
-#    sde = SDE(t, Matrix([[1/(t+1)]*435580]), Matrix([[t]*435580]), Matrix([[1]*435580]), drift_integral_form=True, diffusion_integral_form=True, drift_diagonal_form=True, diffusion_diagonal_form=True, diffusion_matrix_diagonal_form=True)
-#    t1 = timeit.time.time()
-#    print(t1-t0)
-
-
-
-    #model_out = jnp.ones((len(timesteps), n))
-    #h = 0.05 # aka dt -- too big h results in nan, already at 0.1 this happens, The NANs appear from the diffusion term.
-    #prev_x, dxdt, key = sde.step(model_out, timesteps, v_drift_param, v_diffusion_param, noisy_data = x0, key=key, dt=h)
-    #print(f"Step test shape = {prev_x.shape}")
-
-    #model_out2 = jnp.ones((len(timesteps), n))*2
-    #new_x, key = sde.step_correct(model_out2, timesteps, v_drift_param, v_diffusion_param, noisy_data=x0, euler_data = prev_x, dxdt=dxdt, key=key, dt=h)
-    #print(f"Step correct test shape = {new_x.shape}")
-    #print("Step and Step correct tests run :)")
