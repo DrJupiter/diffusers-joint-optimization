@@ -256,7 +256,7 @@ class SDE_PARAM:
         """
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
-        symbolic_reverse_time_derivative = sympy.cancel(sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension})))
+        symbolic_reverse_time_derivative = sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension}))
 
 
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
@@ -553,12 +553,13 @@ if __name__ == "__main__":
     #drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
 
-    drift_param = Matrix([x1,x2,x3])
-    diffusion_param = Matrix([x4,x5])
+    drift_param = Matrix([x1])
+    #diffusion_param = Matrix([x4,x5])
+    diffusion_param = Matrix([x4])
     #drift_param = diffusion_param = sympy.symbols("∅", real=True)
 
-    v_drift_param =  jnp.array([1.,1.,1.])
-    v_diffusion_param =  jnp.array([4.,4.])
+    v_drift_param =  jnp.array([1.])
+    v_diffusion_param =  jnp.array([4.])
     #v_drift_param = v_diffusion_param = jnp.array([None])
 
     key = jax.random.PRNGKey(0)
@@ -572,8 +573,8 @@ if __name__ == "__main__":
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
-    F = Matrix.diag([sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]+diffusion_param[1]]*n) 
+    F = Matrix.diag([sympy.cos(t*drift_param[0])]*n)
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]]*n) 
     Q = Matrix.eye(n)
 
     drift_dimension = SDEDimension.FULL
@@ -581,8 +582,8 @@ if __name__ == "__main__":
     drift_dimension = SDEDimension.SCALAR
 
 
-    S_F = sympy.cos(t*drift_param[1])*drift_param[0] + drift_param[2]
-    S_L = sympy.sin(t)*diffusion_param[0]+diffusion_param[1]
+    S_F = sympy.cos(t*drift_param[0])
+    S_L = sympy.sin(t)*diffusion_param[0]
     S_Q = 1 
 
     #print(F.shape, S_F.shape, S_L.shape, S_Q.shape)
