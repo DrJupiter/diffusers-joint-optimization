@@ -17,6 +17,9 @@ def matrix_diagonal_product(matrix, diagonal):
 
 def simple_squeeze(arr):
     new_shape = tuple(dim for dim in arr.shape if dim != 1)
+    # handle case of (1,1,...,1)
+    if len(new_shape) == 0:
+        new_shape = (1,)
     return arr.reshape(*new_shape)
 
 class SDEDimension(Enum):
@@ -277,10 +280,8 @@ class SDE_PARAM:
         lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
-        scaled_loss_derivative_model = simple_squeeze(sympy.simplify(symbolic_loss.diff(symbolic_model)))
-        print(scaled_loss_derivative_model)
 
-        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], scaled_loss_derivative_model, self.module)
+        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(symbolic_model))), self.module)
         lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module)
         lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module)
 

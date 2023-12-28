@@ -102,16 +102,16 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
 
         return TorchSDE_PARAM_SAMPLE
 
-    def mean(self, *args, device="cuda", **kwargs):
-        return self.get_mean_gradient_function().apply(*args, **kwargs).to(device)
+    def scaled_loss(self, *args, device="cuda", **kwargs):
+        return self.get_scaled_loss_gradient_function().apply(*args, **kwargs).to(device)
 
-    def get_mean_gradient_function(self):
+    def get_scaled_loss_gradient_function(self):
 
-        class TorchSDE_PARAM_MEAN(torch.autograd.Function):
+        class TorchSDE_PARAM_SCALED_LOSS(torch.autograd.Function):
 
             @staticmethod
             def forward(*args: Any, **kwargs: Any) -> Any:
-                return jax_torch(self.v_lambdified_mean(*[torch_jax(arg) for arg in args], **kwargs), requires_grad=True)
+                return jax_torch(self.v_lambdified_scaled_loss(*[torch_jax(arg) for arg in args], **kwargs), requires_grad=True)
 
             @staticmethod 
             def setup_context(ctx: Any, inputs: Tuple[Any, ...], output: Any) -> Any:
@@ -122,10 +122,10 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             @staticmethod
             def backward(ctx: Any, grad_output) -> Any:
                 tensors = [torch_jax(tensor) for tensor in ctx.saved_tensors]
-                return None, None, batch_matmul(grad_output , jax_torch(self.v_lambdified_mean_drift_derivative(*tensors))).to(self.device) 
+                return None, None, batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_model(*tensors))).to(self.device), batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_drift(*tensors))).to(self.device), batch_matmul(grad_output, jax_torch(self.v_lambdified_scaled_loss_derivative_diffusion(*tensors))).to(self.device) 
                 #return super().backward(ctx, *grad_outputs)
 
-        return TorchSDE_PARAM_MEAN
+        return TorchSDE_PARAM_SCALED_LOSS
 
     def set_timesteps(self, num_inference_steps, batch_size, device):
         self.timesteps = torch.from_numpy(np.linspace(self.min_sample_value, self.max_variable_value, num_inference_steps)[::-1].copy()).to(device).repeat(batch_size)
@@ -189,6 +189,7 @@ if __name__ == "__main__":
     timesteps = jax_torch(timesteps)
     z = jax_torch(z)
     x0 = jax_torch(x0)
+    model_output = torch.ones_like(x0, device='cuda', requires_grad=True)
 
     torch.set_printoptions(precision=8)
     #sde.initialize_parameters(v_drift_param, v_diffusion_param)
@@ -198,8 +199,11 @@ if __name__ == "__main__":
 
     # TEST GRADIENTS
     torch.autograd.gradcheck(lambda param, param2: noise_scheduler.sample(timesteps, x0, z, param, param2), noise_scheduler.parameters()) 
-    torch.autograd.gradcheck(lambda param: noise_scheduler.mean(timesteps, x0, param), noise_scheduler.parameters()[0])
+    torch.autograd.gradcheck(lambda model, drift, diffusion: noise_scheduler.scaled_loss(timesteps, x0, model, drift, diffusion), (model_output,*noise_scheduler.parameters(),))
 
+
+    import sys
+    sys.exit(0)
     # TEST UPDATE
     model_output = torch.ones_like(x0, device='cuda') 
     print(noise_scheduler.parameters())
