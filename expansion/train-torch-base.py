@@ -4,7 +4,6 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
 import math
 from tqdm.auto import tqdm
 import sys
-sys.setrecursionlimit(15000)
 
 import random
 import torch
@@ -35,6 +34,7 @@ from sde_torch_param import TorchSDE_PARAM
 
 def main():
 
+    sys.setrecursionlimit(15000)
     config = Config()
 
 
