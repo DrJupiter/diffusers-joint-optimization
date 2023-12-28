@@ -63,8 +63,8 @@ class TrainingConfig:
     pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
 
-    load_pretrained_model = True # True -> load pretrained unet, False -> Train unet from scratch.
-    load_optimizer = True # True -> load optimizer, False -> Train optimizer from scratch.
+    load_pretrained_model = False # True -> load pretrained unet, False -> Train unet from scratch.
+    load_optimizer = False # True -> load optimizer, False -> Train optimizer from scratch.
 
 @dataclass
 class OptimizerConfig:
