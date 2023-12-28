@@ -254,7 +254,8 @@ def main():
 #
                 #difference = model_pred.float() - target.float()
                 #norm = noise_scheduler
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
+                #loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
+                loss = noise_scheduler.scaled_loss(timesteps, target.float(), model_pred.float(), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
                 avg_loss = accelerator.gather(loss.repeat(config.training.batch_size)).mean()
                 train_loss += avg_loss.item()

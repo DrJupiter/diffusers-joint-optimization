@@ -204,25 +204,17 @@ if __name__ == "__main__":
     torch.autograd.gradcheck(lambda model, drift, diffusion: noise_scheduler.scaled_loss(timesteps, z, model, drift, diffusion), (model_output,*noise_scheduler.parameters(),))
 
 
-    import sys
-    sys.exit(0)
     # TEST UPDATE
-    model_output = torch.ones_like(x0, device='cuda') 
     print(noise_scheduler.parameters())
     optimizer = torch.optim.SGD(noise_scheduler.parameters(), lr = 0.1, momentum=0.9)
 
     samples = noise_scheduler.sample(timesteps, x0, z, *noise_scheduler.parameters())
-    diff = model_output-samples
-    mean_matrix = noise_scheduler.mean(timesteps, x0, noise_scheduler.parameters()[0])
-    print(batch_matmul(diff, diff))
-    I = torch.stack([torch.eye(data_dimension)]*2).cuda()+1
-    print(batch_matmul(diff,batch_matmul(I, diff)))
-    I2 = torch.eye(data_dimension).cuda()+1
-    print(batch_matmul(diff, diff @ I2))
+    prediction = samples * model_output
+
     
     #print(batch_matmul(diff, diff @ I).sum())
-    print(torch.nn.functional.mse_loss(model_output, samples, reduction='sum'))
-    loss = torch.mean(batch_matmul(diff, diff * mean_matrix))
+    #loss = torch.nn.functional.mse_loss(prediction, z.cuda()) 
+    loss = noise_scheduler.scaled_loss(timesteps, z, prediction, *noise_scheduler.parameters()).mean()
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
