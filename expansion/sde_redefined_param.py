@@ -258,6 +258,7 @@ class SDE_PARAM:
         symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
         symbolic_reverse_time_derivative = sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension}))
 
+        symbolic_loss = self.symbolic_scaled_loss().subs({self.data_dim: data_dimension})
 
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
         symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
@@ -272,21 +273,25 @@ class SDE_PARAM:
         #        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
         #        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
 
-        symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
-        symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
+        #symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
+        #symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
+        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
+        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
 
-        symbolic_loss = self.symbolic_scaled_loss().subs({self.symbolic_model: symbolic_model, self.symbolic_target: symbolic_target}).subs({self.data_dim: data_dimension}).doit()
+        #symbolic_loss = self.symbolic_scaled_loss().subs({self.symbolic_model: symbolic_model, self.symbolic_target: symbolic_target}).subs({self.data_dim: data_dimension}).doit()
         # SCALED LOSS
         lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
 
-        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(symbolic_model))), self.module)
-        lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module)
-        lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module)
+        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], (sympy.simplify(symbolic_loss.diff(symbolic_model, old_algorithm=self.scaled_loss_old_algorithm))), self.module, cse=True)
 
-        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
-        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
+        lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module, cse=True)
+
+        lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module, cse=True)
+
+        #symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
+        #symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
         print(f"{symbolic_sample.shape=}, {symbolic_loss.shape=}")
 
 
@@ -377,7 +382,7 @@ class SDE_PARAM:
         exp_F = self.drift.symbolic_solution_matrix
         inv_A = self.diffusion.symbolic_inv_decomposition
 
-        difference = self.symbolic_target - self.symbolic_model
+        difference =self.symbolic_model-self.symbolic_target
         # DIMENSION OF A
         match (self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
             case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
@@ -392,19 +397,24 @@ class SDE_PARAM:
             case (SDEDimension.SCALAR, _) | (_, SDEDimension.SCALAR):
                 # Probably something here
                 scale = exp_F * inv_A
-                loss = (difference @ scale @ difference.T).expand() 
+                loss = (difference @ scale @ difference.T)
+                self.scaled_loss_old_algorithm = True
             case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
-                scale = sympy.HadamardProduct(exp_F, inv_A)
-                loss = sympy.MatMul(difference, sympy.HadamardProduct(difference, scale).T) 
+                scale = sympy.HadamardProduct(inv_A, exp_F).doit()
+                loss = sympy.MatMul(difference , sympy.HadamardProduct(difference, scale, evaluate=False).T, evaluate=False) 
+                self.scaled_loss_old_algorithm = True
             case (SDEDimension.FULL, SDEDimension.DIAGONAL):
                 scale = matrix_diagonal_product(exp_F, inv_A)
                 loss = difference @ scale @ difference.T
+                self.scaled_loss_old_algorithm = True
             case (SDEDimension.DIAGONAL, SDEDimension.FULL):
                 scale = matrix_diagonal_product(inv_A, exp_F)
                 loss = difference @ scale @ difference.T
+                self.scaled_loss_old_algorithm = True
             case (SDEDimension.FULL, SDEDimension.FULL):
                 scale = exp_F @ inv_A
                 loss = difference @ scale @ difference.T
+                self.scaled_loss_old_algorithm = True
 
         return loss
                 
