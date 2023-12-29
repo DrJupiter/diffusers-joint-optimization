@@ -263,24 +263,14 @@ class SDE_PARAM:
         symbolic_input = self.symbolic_input.subs({self.data_dim: data_dimension})
         symbolic_noise = self.symbolic_noise.subs({self.data_dim: data_dimension})
 
-
-        # For some reason sympy's diff engine will fail if we don't do this:
-        #match (self.drift.dimension, self.diffusion.diffusion_dimension, self.diffusion.diffusion_matrix_dimension):
-        #    case (SDEDimension.FULL,SDEDimension.FULL,SDEDimension.FULL):
-        #        symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
-        #        symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
-        #    case (_,_,_):
-        #        symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
-        #        symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
-
-        #symbolic_model = Matrix([sympy.symbols(f"m_{{0:{data_dimension}}}")])
-        #symbolic_target = Matrix([sympy.symbols(f"t_{{0:{data_dimension}}}")])
         symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
         symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
 
-        #symbolic_loss = self.symbolic_scaled_loss().subs({self.symbolic_model: symbolic_model, self.symbolic_target: symbolic_target}).subs({self.data_dim: data_dimension}).doit()
+        print(symbolic_loss)
+       
         # SCALED LOSS
         lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
+        #print(symbolic_loss)
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
 
