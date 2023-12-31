@@ -58,7 +58,7 @@ class TrainingConfig:
     max_steps = None
     epochs = 1000 
 
-    save_dir = "/work3/s204123/pokemon-text-to-image"
+    save_dir = "pokemon-text-to-image"
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
