@@ -17,7 +17,7 @@ class WandbConfig:
     project = "Special Course"
     image_amount = 4
 
-    experiment = "TTI"  # TODO: Write Code which derives this
+    experiment = "TTI-NO-INIT"  # TODO: Write Code which derives this
 
 
 @dataclass
@@ -104,7 +104,7 @@ class SDEConfig:
     drift_parameters = Matrix([sympy.symbols("f1")])
     diffusion_parameters = Matrix([sympy.symbols("l1")])
     
-    drift =-10*variable**2 * drift_parameters[0]**2 
+    drift =-variable**2 * drift_parameters[0]**2 
     k = 1 * diffusion_parameters[0]**2 
     diffusion = sympy.Piecewise((k * sympy.sin(variable/2 * sympy.pi), variable < 1), (k*1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
