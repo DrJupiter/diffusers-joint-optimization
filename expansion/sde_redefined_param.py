@@ -266,10 +266,9 @@ class SDE_PARAM:
         symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
         symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
 
-        print(symbolic_loss)
        
         # SCALED LOSS
-        lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
+        lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module, cse=True)
         #print(symbolic_loss)
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
@@ -287,17 +286,17 @@ class SDE_PARAM:
 
 
         # SAMPLE
-        lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
+        lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module, cse=True)
 
         # DERIVATIVE OF SAMPLE W.R.T DRIFT AND DIFFUSION 
         drift_derivative = symbolic_sample.diff(self.drift_parameters)
         diffusion_derivative = symbolic_sample.diff(self.diffusion_parameters)
 
-        lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module)
-        lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module)
+        lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module, cse=True)
+        lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module, cse=True)
 
         # REVERSE TIME DERIVATIVE
-        lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module)
+        lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module, cse=True)
         
         # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
         if self.module == "jax":
@@ -391,7 +390,7 @@ class SDE_PARAM:
                 self.scaled_loss_old_algorithm = True
             case (SDEDimension.DIAGONAL, SDEDimension.DIAGONAL):
                 scale = sympy.HadamardProduct(inv_A, exp_F).doit()
-                loss = sympy.MatMul(difference , sympy.HadamardProduct(difference, scale, evaluate=False).T, evaluate=False) 
+                loss = sympy.MatMul(sympy.HadamardProduct(difference, scale, evaluate=False), difference.T, evaluate=False) 
                 self.scaled_loss_old_algorithm = True
             case (SDEDimension.FULL, SDEDimension.DIAGONAL):
                 scale = matrix_diagonal_product(exp_F, inv_A)
@@ -407,15 +406,7 @@ class SDE_PARAM:
                 self.scaled_loss_old_algorithm = True
 
         return loss
-                
-        # 
-        #match (self.drift.dimension, inv_decomposition_dimension):
 
-        #    case (SDEDimension.FULL, _) | (_, SDEDimension.FULL):
-        #         
-        #    case (SDEDimension.DIAGONAL, _) | (_, SDEDimension.DIAGONAL):
-        #        
-        #    case (SDEDimension.SCALAR, SDEDimension.SCALAR):
                 
         
 
@@ -553,17 +544,17 @@ if __name__ == "__main__":
     #drift_param, diffusion_param = sympy.MatrixSymbol("Theta_F",3,1), sympy.MatrixSymbol("Theta_L",2,1) 
     x1,x2,x3,x4,x5 = sympy.symbols("x1 x2 x3 x4 x5", real=True)
 
-    drift_param = Matrix([x1])
+    drift_param = Matrix([x1, x2, x3])
     #diffusion_param = Matrix([x4,x5])
-    diffusion_param = Matrix([x4])
+    diffusion_param = Matrix([x4, x5])
     #drift_param = diffusion_param = sympy.symbols("∅", real=True)
 
-    v_drift_param =  jnp.array([1.])
-    v_diffusion_param =  jnp.array([4.])
+    v_drift_param =  jnp.array([1., 2., 3.])
+    v_diffusion_param =  jnp.array([4., 3.5])
     #v_drift_param = v_diffusion_param = jnp.array([None])
 
     key = jax.random.PRNGKey(0)
-    timesteps = jnp.array([0.1]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
+    timesteps = jnp.array([0.1, 0.5]) # TODO, ask klaus if len(timesteps) =  batchsize, or why the things take multiple timesteps
     n = 4 # dims of problem
 
     x0 = jnp.ones((len(timesteps), n))*1/2
@@ -573,8 +564,8 @@ if __name__ == "__main__":
 
     #custom_vector = sample(timesteps, jnp.ones((len(timesteps), 435580)), key)
 
-    F = Matrix.diag([sympy.cos(t*drift_param[0])]*n)
-    L = Matrix.diag([sympy.sin(t)*diffusion_param[0]]*n) 
+    F = Matrix.diag([sympy.cos(t*drift_param[0]) + t * (drift_param[1]) + t**2 * drift_param[2]]*n)
+    L = Matrix.diag([sympy.sin(t)*diffusion_param[0] + t * diffusion_param[1]]*n) 
     Q = Matrix.eye(n)
 
     drift_dimension = SDEDimension.FULL
@@ -582,8 +573,8 @@ if __name__ == "__main__":
     drift_dimension = SDEDimension.SCALAR
 
 
-    S_F = sympy.cos(t*drift_param[0])
-    S_L = sympy.sin(t)*diffusion_param[0]
+    S_F = sympy.cos(t*drift_param[0]) + t * (drift_param[1]) + t**2 * drift_param[2]
+    S_L = sympy.sin(t)*diffusion_param[0] + t * diffusion_param[1]
     S_Q = 1 
 
     #print(F.shape, S_F.shape, S_L.shape, S_Q.shape)
