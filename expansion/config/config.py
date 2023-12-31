@@ -46,7 +46,7 @@ class TrainingConfig:
 
     center_crop = False
     random_flip = True
-    resolution = 32 # 32
+    resolution = 26 # 32
 
 # HYPER PARAMETERS
     seed = 0
@@ -105,7 +105,7 @@ class SDEConfig:
     diffusion_parameters = Matrix([sympy.symbols("l1")])
     
     drift =-variable**2 * drift_parameters[0]**2
-    k = 1 
+    k = 1 * diffusion_parameters[0]**2
     diffusion = sympy.Piecewise((k * sympy.sin(variable/2 * sympy.pi), variable < 1), (k*1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
