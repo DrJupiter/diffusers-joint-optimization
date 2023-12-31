@@ -40,13 +40,13 @@ class TrainingConfig:
     caption_column = "text" #"label" 
     try_convert_label_string = False # True
 
-    cache_dir = "/work3/s204123" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
     center_crop = False
     random_flip = True
-    resolution = 26 # 32
+    resolution = 32 # 32
 
 # HYPER PARAMETERS
     seed = 0
