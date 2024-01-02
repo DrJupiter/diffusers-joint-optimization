@@ -22,8 +22,8 @@ module swap tensorrt/8.6.1.6-cuda-11.X tensorrt/8.6.1.6-cuda-12.X
 
 echo "LOADED MODULES"
 
-source /zhome/33/4/155714/dtu/bin/activate
+source dtu/bin/activate
 
 echo "ACTIVATED VIRTUAL ENVIRONMENT"
 
-python3 -m accelerate.commands.launch --mixed_precision="fp16" /zhome/33/4/155714/diffusers-joint-optimization/expansion/train-torch-base.py 
+python3 -m accelerate.commands.launch --mixed_precision="fp16" diffusers-joint-optimization/expansion/train-torch-base.py 
