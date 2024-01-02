@@ -1,7 +1,7 @@
 #!/bin/bash
 #BSUB -q gpua100
 #BSUB -J specialcourse 
-#BSUB -n 4
+#BSUB -n 16
 #BSUB -gpu "num=2:mode=shared"
 #BSUB -R "select[gpu80gb]"
 #BSUB -W 24:00
