@@ -193,7 +193,7 @@ def main():
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         train_loss = 0.0
         for batch in train_dataloader:
-            break 
+
             with accelerator.accumulate(unet):
 
                 clean_images = batch["pixel_values"]

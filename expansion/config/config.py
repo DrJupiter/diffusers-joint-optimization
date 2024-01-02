@@ -59,7 +59,7 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-test-tti"
+    repo_name = "pokemon-base-line"
 
     save_dir = f"/work3/s204123/{repo_name}"
 
