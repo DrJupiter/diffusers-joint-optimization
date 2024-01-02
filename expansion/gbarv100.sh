@@ -12,6 +12,8 @@
 #BSUB -o %J.out
 #BSUB -e %J.out
 
+nvidia-smi
+
 echo "Running script..."
 
 module load python3/3.11.4

@@ -41,6 +41,7 @@ class TrainingConfig:
     try_convert_label_string = False # True
 
     cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -59,7 +60,7 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-base-line"
+    repo_name = "pokemon-base-line-kerasVe"
 
     save_dir = f"/work3/s204123/{repo_name}"
 
@@ -109,7 +110,7 @@ class SDEConfig:
     diffusion_parameters = Matrix([sympy.symbols("l1")])
     
     drift =-variable**2 * drift_parameters[0]**2
-    k = 1 * diffusion_parameters[0]**2 
+    k = 1 #* diffusion_parameters[0]**2 
     diffusion = sympy.Piecewise((k * sympy.sin(variable/2 * sympy.pi), variable < 1), (k*1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
@@ -122,6 +123,41 @@ class SDEConfig:
 
     drift_integral_form=True
     diffusion_integral_form=True
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+
+
+    target = "epsilon" # x0
+
+@dataclass
+class SDEBaseLineConfig:
+    name = "Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
+
+    # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
+    drift_parameters = Matrix([sympy.symbols("f1")])
+    diffusion_parameters = Matrix([sympy.symbols("l1")])
+    
+    drift = 0
+
+    sigma_min = 0.002 
+    sigma_max = 80
+    diffusion = sigma_min * (sigma_max/sigma_min)**variable * sympy.sqrt(2 * sympy.log(sigma_max/sigma_min)) 
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = 1 
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 1e-6
+
+    module = 'jax'
+
+    drift_integral_form=False
+    diffusion_integral_form=False
     diffusion_integral_decomposition = 'cholesky' # ldl
 
 
@@ -207,7 +243,8 @@ def create_diffusion_param_func(var,degree,subname,func):
 class Config:
     logging = WandbConfig()
     training = TrainingConfig()
-    sde = SDEConfig()
+    #sde = SDEConfig()
+    sde = SDEBaseLineConfig()
     sde.data_dim = training.resolution ** 2 * 3
 
     optimizer = OptimizerConfig()
