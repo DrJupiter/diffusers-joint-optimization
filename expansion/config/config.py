@@ -17,7 +17,7 @@ class WandbConfig:
     project = "Special Course"
     image_amount = 4
 
-    experiment = "TTI-NO-INIT-NO-DIFFUSION-PARAM"  # TODO: Write Code which derives this
+    experiment = "TTI-KERAS"  # TODO: Write Code which derives this
 
 
 @dataclass
