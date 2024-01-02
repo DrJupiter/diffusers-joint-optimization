@@ -54,7 +54,7 @@ def save_local_cloud(config: Config, params, pipeline, interface="jax", accelera
 
         if config.training.push_to_hub:
             repo_id = create_repo(
-                repo_id=get_full_repo_name(config.training.save_dir), exist_ok=True, token=HfFolder.get_token()
+                repo_id=get_full_repo_name(config.training.repo_name), exist_ok=True, token=HfFolder.get_token()
             ).repo_id
 
          

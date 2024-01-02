@@ -40,7 +40,7 @@ class TrainingConfig:
     caption_column = "text" #"label" 
     try_convert_label_string = False # True
 
-    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -56,9 +56,13 @@ class TrainingConfig:
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
     max_steps = None
-    epochs = 1000 
+    epochs = 10000
 
-    save_dir = "pokemon-text-to-image"
+
+    repo_name = "pokemon-test-tti"
+
+    save_dir = f"/work3/s204123/{repo_name}"
+
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
@@ -105,7 +109,7 @@ class SDEConfig:
     diffusion_parameters = Matrix([sympy.symbols("l1")])
     
     drift =-variable**2 * drift_parameters[0]**2
-    k = 1 
+    k = 1 * diffusion_parameters[0]**2 
     diffusion = sympy.Piecewise((k * sympy.sin(variable/2 * sympy.pi), variable < 1), (k*1, variable >= 1))
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
