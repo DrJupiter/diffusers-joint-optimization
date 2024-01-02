@@ -24,7 +24,7 @@ module swap tensorrt/8.6.1.6-cuda-11.X tensorrt/8.6.1.6-cuda-12.X
 
 echo "LOADED MODULES"
 
-source /zhome/33/4/155714/dtu/bin/activate
+source /zhome/33/4/155714/dtu/bin/activate || source /zhome/59/e/156513/dtu/bin/activate
 
 echo "ACTIVATED VIRTUAL ENVIRONMENT"
 
