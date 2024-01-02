@@ -17,7 +17,7 @@ class WandbConfig:
     project = "Special Course"
     image_amount = 4
 
-    experiment = "TTI-KERAS"  # TODO: Write Code which derives this
+    experiment = "TTI-DRIFT"  # TODO: Write Code which derives this
 
 
 @dataclass
@@ -40,8 +40,8 @@ class TrainingConfig:
     caption_column = "text" #"label" 
     try_convert_label_string = False # True
 
-    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -60,10 +60,10 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-base-line-kerasVe"
+    repo_name = "pokemon-drift"
 
-    #save_dir = f"/work3/s204123/{repo_name}"
-    save_dir = f"{repo_name}"
+    save_dir = f"/work3/s204123/{repo_name}"
+    #save_dir = f"{repo_name}"
 
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
@@ -244,8 +244,8 @@ def create_diffusion_param_func(var,degree,subname,func):
 class Config:
     logging = WandbConfig()
     training = TrainingConfig()
-    #sde = SDEConfig()
-    sde = SDEBaseLineConfig()
+    sde = SDEConfig()
+    #sde = SDEBaseLineConfig()
     sde.data_dim = training.resolution ** 2 * 3
 
     optimizer = OptimizerConfig()
