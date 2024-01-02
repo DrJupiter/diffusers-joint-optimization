@@ -40,8 +40,8 @@ class TrainingConfig:
     caption_column = "text" #"label" 
     try_convert_label_string = False # True
 
-    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -62,7 +62,8 @@ class TrainingConfig:
 
     repo_name = "pokemon-base-line-kerasVe"
 
-    save_dir = f"/work3/s204123/{repo_name}"
+    #save_dir = f"/work3/s204123/{repo_name}"
+    save_dir = f"{repo_name}"
 
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
