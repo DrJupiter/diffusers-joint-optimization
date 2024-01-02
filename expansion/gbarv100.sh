@@ -24,8 +24,18 @@ module swap tensorrt/8.6.1.6-cuda-11.X tensorrt/8.6.1.6-cuda-12.X
 
 echo "LOADED MODULES"
 
-source /zhome/33/4/155714/dtu/bin/activate || source /zhome/59/e/156513/dtu/bin/activate
+if [ -d "/zhome/33/4/155714/" ] && [ -r "/zhome/33/4/155714/" ]; then
+    # Commands to run if you have access to the first directory
+    source /zhome/33/4/155714/dtu/bin/activate
+    echo "ACTIVATED VIRTUAL ENVIRONMENT"
 
-echo "ACTIVATED VIRTUAL ENVIRONMENT"
-
-python3 -m accelerate.commands.launch --mixed_precision="fp16" /zhome/33/4/155714/diffusers-joint-optimization/expansion/train-torch-base.py 
+    python3 -m accelerate.commands.launch --mixed_precision="fp16" /zhome/33/4/155714/diffusers-joint-optimization/expansion/train-torch-base.py 
+elif [ -d "/zhome/59/e/156513/" ] && [ -r "/zhome/59/e/156513/" ]; then
+    # Commands to run if you have access to the second directory
+    source /zhome/59/e/156513/dtu/bin/activate
+    echo "ACTIVATED VIRTUAL ENVIRONMENT"
+    python3 -m accelerate.commands.launch --mixed_precision="fp16" /zhome/59/e/156513/diffusers-joint-optimization/expansion/train-torch-base.py 
+else
+    # Commands to run if you don't have access to any of the directories
+    echo "CODE NOT EXUCUTED"
+fi
