@@ -1,5 +1,7 @@
+from os import PathLike
+import os
 from sde_redefined_param import SDE_PARAM, SDEDimension
-from typing import Any, Tuple
+from typing import Any, Dict, Tuple, Union, Optional
 #import torch
 import numpy as np
 import math
@@ -10,6 +12,13 @@ import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
 from transformers import set_seed
+
+import safetensors
+from safetensors.torch import save_file
+from config.utils import save_class_to_file, load_class_from_file
+from config.config import Config
+
+from huggingface_hub.utils import validate_hf_hub_args
 
 batch_matmul = torch.vmap(torch.matmul)
 batch_mul    = torch.vmap(torch.mul)
@@ -24,7 +33,6 @@ def torch_jax(tensor):
 
 class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
     
-    #@register_to_config
     def __init__(
         self,
     device: str,
@@ -53,6 +61,9 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         self.initialize_parameters(device=device) # TODO (KLAUS): CONSIDER IF IT IS SMARTEST TO LEAVE INITIALIZING TO THE USER ALWAYS
         self.device=device
         self.min_sample_value = min_sample_value
+
+        self.config_class = Config().sde.__class__
+        self._internal_dict = {'data_dimension': data_dimension}
         
     def initialize_parameters(self, drift_parameters=None, diffusion_parameters=None, device="cuda"):
 
@@ -139,6 +150,115 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
     def step(self, data, reverse_time_derivative, dt):
         return data + dt * reverse_time_derivative
 
+    def save_pretrained(self, save_directory: Union[str, PathLike], push_to_hub: bool = False, **kwargs):
+        """
+        Save a scheduler configuration object to a directory so that it can be reloaded using the
+        [`~SchedulerMixin.from_pretrained`] class method.
+
+        As the scheduler is parameterized we save:
+            - the drift parameters
+            - the diffusion parameters
+            - the config file for the sde
+            - the other arguments passed to the scheduler
+
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face Hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional keyword arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+        """
+
+        #config.sde.__class__
+        #<class 'config.config.SDEConfig'>
+        #inspect.getsource(config.sde.__class__)
+
+        if os.path.isfile(save_directory):
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        os.makedirs(save_directory, exist_ok=True)
+
+        parameters = dict(zip(['drift', 'diffusion'] , self.parameters()))
+        save_file(parameters, os.path.join(save_directory, "sdeparameters.pt"))
+
+        save_class_to_file(self.config_class, os.path.join(save_directory, "scheduler_config.py"))
+
+        self.save_config(save_directory=save_directory, push_to_hub=push_to_hub, **kwargs)
+
+    @classmethod
+    @validate_hf_hub_args
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, PathLike]] = None,
+        subfolder: Optional[str] = None,
+        return_unused_kwargs=False,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a scheduler from a pre-defined JSON configuration file in a local directory or Hub repository.
+
+        Parameters:
+            pretrained_model_name_or_path (`str` or `os.PathLike`, *optional*):
+                Can be either:
+
+                    - A string, the *model id* (for example `google/ddpm-celebahq-256`) of a pretrained model hosted on
+                      the Hub.
+                    - A path to a *directory* (for example `./my_model_directory`) containing the scheduler
+                      configuration saved with [`~SchedulerMixin.save_pretrained`].
+            subfolder (`str`, *optional*):
+                The subfolder location of a model file within a larger model repository on the Hub or locally.
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                Whether kwargs that are not consumed by the Python class should be returned or not.
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
+                Path to a directory where a downloaded pretrained model configuration is cached if the standard cache
+                is not used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            resume_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to resume downloading the model weights and configuration files. If set to `False`, any
+                incompletely downloaded files are deleted.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, for example, `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            output_loading_info(`bool`, *optional*, defaults to `False`):
+                Whether or not to also return a dictionary containing missing keys, unexpected keys and error messages.
+            local_files_only(`bool`, *optional*, defaults to `False`):
+                Whether to only load local model weights and configuration files or not. If set to `True`, the model
+                won't be downloaded from the Hub.
+            token (`str` or *bool*, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, the token generated from
+                `diffusers-cli login` (stored in `~/.huggingface`) is used.
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, a commit id, or any identifier
+                allowed by Git.
+
+        <Tip>
+
+        To use private or [gated models](https://huggingface.co/docs/hub/models-gated#gated-models), log-in with
+        `huggingface-cli login`. You can also activate the special
+        ["offline-mode"](https://huggingface.co/diffusers/installation.html#offline-mode) to use this method in a
+        firewalled environment.
+
+        </Tip>
+
+        """
+        config, kwargs, commit_hash = cls.load_config(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            subfolder=subfolder,
+            return_unused_kwargs=True,
+            return_commit_hash=True,
+            **kwargs,
+        )
+        return cls.from_config(config, return_unused_kwargs=return_unused_kwargs, **kwargs)
+    @classmethod
+    @validate_hf_hub_args
+    def load_config(cls, pretrained_model_name_or_path: str | PathLike, return_unused_kwargs=False, return_commit_hash=False, **kwargs) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        return super().load_config(pretrained_model_name_or_path, return_unused_kwargs, return_commit_hash, **kwargs)
+        
 if __name__ == "__main__":
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
@@ -149,6 +269,7 @@ if __name__ == "__main__":
     import sympy
     from sympy import Symbol, Matrix
     from config.config import Config
+
 
     config = Config()
     set_seed(config.training.seed)
@@ -176,7 +297,9 @@ if __name__ == "__main__":
     diffusion_dimension=config.sde.diffusion_dimension,
     diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
     )
-    
+    noise_scheduler.save_pretrained("/media/extra/diffusers-joint-optimization/pokemon-testing/scheduler")
+    import sys
+    sys.exit(0)
     timesteps = jnp.array([0.1, 0.4])
     x0 = jnp.ones((len(timesteps), data_dimension))*1/2
 

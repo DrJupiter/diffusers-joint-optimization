@@ -43,7 +43,6 @@ def save_local_cloud(config: Config, params, pipeline, interface="jax", accelera
     # Handle the repository creation
 
     if interface == "jax":
-
         check = jax.process_index() == 0
     elif interface == "torch":
         check = accelerator.is_main_process
@@ -107,4 +106,49 @@ def update_sde_parameter_plot(plot, step, *args):
         plot.data[i].y = list(plot.data[i].y) + [arg.item()]
 
 
+import ast
+import inspect
+
+def get_imports(file_path):
+    """
+    Gets all imports from a python file 
+    """
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+
+    tree = ast.parse(file_content)
+    imports = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+            imports.append(ast.unparse(node))
+
+    return imports
+
+
+def save_class_to_file(cls, save_path):
+    """
+    Save a python class to a file
+    and all import statements in the file the class is defined in.
+    """
+    file_path = inspect.getsourcefile(cls)
+    class_def = inspect.getsource(cls)
+
+    imports = "\n".join(get_imports(file_path))
+
+    config_str = imports + "\n" + class_def
+    with open(save_path, "w") as f:
+        f.write(config_str)
+
+def load_class_from_file(cls_name, config_path):
+    """
+    Given a class name and a path to where it is defined,
+    execute the python file and return the class.
+
+    NOTE: This code uses exec, which is not safe.
+    """
+    file = open(config_path, 'r').read()
+    exec(file, locals())
+    return locals()[cls_name]()
+    
 
