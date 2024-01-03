@@ -193,6 +193,7 @@ def main():
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         train_loss = 0.0
         for batch in train_dataloader:
+            break
             with accelerator.accumulate(unet):
 
                 clean_images = batch["pixel_values"]
@@ -295,9 +296,9 @@ def main():
                 #prompts = ["0", "1", "2", "3", "4", "5"]
 
                 noise_type = random.choice(noise_types)
-                images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
-                image_grid = make_image_grid(images, rows=3,cols=4)
-                accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
+                #images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
+                #image_grid = make_image_grid(images, rows=3,cols=4)
+                #accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
                 if (_epoch % 100) == 0:
                     save_local_cloud(config, {"optimizer": accelerator.unwrap_model(optimizer).state_dict(), "lr_scheduler": accelerator.unwrap_model(lr_scheduler).state_dict()}, pipeline, interface="torch", accelerator=accelerator)

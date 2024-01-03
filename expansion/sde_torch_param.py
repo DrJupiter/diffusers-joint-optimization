@@ -9,11 +9,11 @@ import jax.numpy as jnp
 import jax
 # TODO (Klaus) : Add mxin and config so we can save properly
 import torch
-from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.configuration_utils import ConfigMixin, register_to_config, http_user_agent, hf_hub_download
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
 from transformers import set_seed
 
-import safetensors
+from safetensors import safe_open
 from safetensors.torch import save_file
 from config.utils import save_class_to_file, load_class_from_file
 from config.config import Config
@@ -63,7 +63,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         self.min_sample_value = min_sample_value
 
         self.config_class = Config().sde.__class__
-        self._internal_dict = {'data_dimension': data_dimension}
+        self._internal_dict = {'data_dimension': data_dimension, '_config_class_name': self.config_class.__name__}
         
     def initialize_parameters(self, drift_parameters=None, diffusion_parameters=None, device="cuda"):
 
@@ -246,19 +246,70 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         </Tip>
 
         """
-        config, kwargs, commit_hash = cls.load_config(
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            subfolder=subfolder,
-            return_unused_kwargs=True,
-            return_commit_hash=True,
-            **kwargs,
-        )
-        return cls.from_config(config, return_unused_kwargs=return_unused_kwargs, **kwargs)
-    @classmethod
-    @validate_hf_hub_args
-    def load_config(cls, pretrained_model_name_or_path: str | PathLike, return_unused_kwargs=False, return_commit_hash=False, **kwargs) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        return super().load_config(pretrained_model_name_or_path, return_unused_kwargs, return_commit_hash, **kwargs)
+
+        device = kwargs.pop("device", "cpu")
+
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        _ = kwargs.pop("mirror", None)
+        subfolder = kwargs.pop("subfolder", "scheduler")
+        user_agent = kwargs.pop("user_agent", {})
+
+        user_agent = {**user_agent, "file_type": "config"}
+        user_agent = http_user_agent(user_agent)
+
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        if cls.config_name is None:
+            raise ValueError(
+                "`self.config_name` is not defined. Note that one should not load a config from "
+                "`ConfigMixin`. Please make sure to define `config_name` in a class inheriting from `ConfigMixin`"
+            )
+
+        parameter_path = hf_hub_download(pretrained_model_name_or_path, filename="sdeparameters.pt", revision=revision, cache_dir=cache_dir, force_download=force_download, resume_download=resume_download, proxies=proxies, local_files_only=local_files_only, use_auth_token=token, user_agent=user_agent, subfolder=subfolder)
+
+        config_json_path = hf_hub_download(pretrained_model_name_or_path, filename=cls.config_name, revision=revision, cache_dir=cache_dir, force_download=force_download, resume_download=resume_download, proxies=proxies, local_files_only=local_files_only, use_auth_token=token, user_agent=user_agent, subfolder=subfolder)
+
+        config_py_path = hf_hub_download(pretrained_model_name_or_path, filename="scheduler_config.py", revision=revision, cache_dir=cache_dir, force_download=force_download, resume_download=resume_download, proxies=proxies, local_files_only=local_files_only, use_auth_token=token, user_agent=user_agent, subfolder=subfolder)
+
+        parameters = {}
+        with safe_open(parameter_path, framework="pt", device=device) as f:
+            for key in f.keys():
+                parameters[key] = f.get_tensor(key)
+        config_json_dict = cls._dict_from_json_file(config_json_path) 
+
+        config_class = load_class_from_file(config_json_dict["_config_class_name"], config_py_path) 
+        noise_scheduler = cls(
+            device=device,
+            min_sample_value=config_class.min_sample_value,
+            data_dimension=config_json_dict["data_dimension"],
+            variable=config_class.variable,
+            drift_parameters=config_class.drift_parameters,
+            diffusion_parameters=config_class.diffusion_parameters,
+            drift=config_class.drift,
+            diffusion=config_class.diffusion,
+            diffusion_matrix=config_class.diffusion_matrix,
+            initial_variable_value=config_class.initial_variable_value,
+            max_variable_value=config_class.max_variable_value,
+            module=config_class.module,
+            model_target=config_class.target,
+            drift_integral_form=config_class.drift_integral_form,
+            diffusion_integral_form=config_class.diffusion_integral_form,
+            diffusion_integral_decomposition=config_class.diffusion_integral_decomposition,
+            drift_dimension=config_class.drift_dimension,
+            diffusion_dimension=config_class.diffusion_dimension,
+            diffusion_matrix_dimension=config_class.diffusion_matrix_dimension
+            )
+        noise_scheduler.initialize_parameters(drift_parameters=parameters['drift'], diffusion_parameters=parameters['diffusion'], device=device)
+        return noise_scheduler
+
+
         
+
 if __name__ == "__main__":
     import os
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
@@ -297,7 +348,8 @@ if __name__ == "__main__":
     diffusion_dimension=config.sde.diffusion_dimension,
     diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
     )
-    noise_scheduler.save_pretrained("/media/extra/diffusers-joint-optimization/pokemon-testing/scheduler")
+    #noise_scheduler.save_pretrained("/media/extra/diffusers-joint-optimization/pokemon-testing/scheduler")
+    out = TorchSDE_PARAM.from_pretrained('AltLuv/pokemon-testing', subfolder="scheduler", revision="main", cache_dir="/media/extra/diffusers-joint-optimization/expansion/config/cache")
     import sys
     sys.exit(0)
     timesteps = jnp.array([0.1, 0.4])
