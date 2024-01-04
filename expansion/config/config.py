@@ -41,8 +41,8 @@ class TrainingConfig:
     caption_column = "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
-    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
