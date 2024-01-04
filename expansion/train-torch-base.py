@@ -258,7 +258,7 @@ def main():
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
 
-            if (_epoch % 10) == 0:
+            if (_epoch % 50) == 0:
                 unwrapped_unet = accelerator.unwrap_model(unet)
                 unwrapped_unet.eval()
                 pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
