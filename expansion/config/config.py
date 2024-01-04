@@ -61,18 +61,19 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-testing"
+    repo_name = "pokemon-polynomial-20"
 
     #save_dir = f"/work3/s204123/{repo_name}"
     save_dir = f"{repo_name}"
 
     push_to_hub = True
-    pretrained_model_or_path = "AltLuv/pokemon-test" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
-    revision = None # LEGITEMATALY DON'T KNOW WHAT THIS DOES
+    #pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    revision = None # The branch of the model repo to use. If not specified, uses the default branch (usually `main`).
 
-    load_pretrained_model = False # True -> load pretrained unet, False -> Train unet from scratch.
-    load_optimizer = False # True -> load optimizer, False -> Train optimizer from scratch.
-    load_noise_scheduler = False # True -> load noise scheduler, False -> Train noise scheduler from scratch.
+    load_pretrained_model = True # True -> load pretrained unet, False -> Train unet from scratch.
+    load_optimizer = True # True -> load optimizer, False -> Train optimizer from scratch.
+    load_noise_scheduler = True # True -> load noise scheduler, False -> Train noise scheduler from scratch.
 
 @dataclass
 class OptimizerConfig:
@@ -209,37 +210,46 @@ def create_diffusion_param_func(var,degree,subname,func):
 
     return f2
 
-# !! TODO (KLAUS): FOR SOME REASON IT SAYS t isn't defined in the var = t statement. 
-# !! I HAVE NO IDEA WHY, AND IT MIGHT JUST BE ON MY MACHINE. 
-# !! THAT'S WHY I'VE COMMENTED IT OUT.
-#@dataclass
-#class SDEConfigParamerterized:
-#    name = "Custom"
-#    t = Symbol('t', nonnegative=True, real=True)
-#
-#    drift_dimension = SDEDimension.DIAGONAL
-#    diffusion_dimension = SDEDimension.DIAGONAL
-#    diffusion_matrix_dimension = SDEDimension.SCALAR
-#    n = 2 # n = 1 -> a scalar matrix
-#    poly_degree = 4
-#    # Using functions abovae
-#    drift = sp.Matrix([create_drift_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
-#    diffusion = sp.Matrix([create_diffusion_param_func(var = t,degree = poly_degree,subname = i, func = polynomial) for i in range(n)]).T
-#    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
-#    diffusion_matrix = Matrix([1]) # because of dimension choice, this will be delt with as I
-#
-#    initial_variable_value = 0
-#    max_variable_value = 1 # math.inf
-#    min_sample_value = 1e-4
-#    # TODO: Max sample value (as we cannot sample t=1 for drift)
-#
-#    module = 'jax'
-#
-#    drift_integral_form=True
-#    diffusion_integral_form=True
-#    diffusion_integral_decomposition = 'cholesky' # ldl
-#
-#    target = "epsilon" # x0
+@dataclass
+class SDEPolynomialConfig:
+    name = "Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
+
+    drift_degree = 20
+    diffusion_degree = 20
+
+    drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True)])
+
+    # square parameters to ensure positive definiteness
+    diffusion_parameters = Matrix([sympy.symbols(f"l:{diffusion_degree}", real=True)])
+
+    @property
+    def drift(self): 
+        return -sympy.Abs(sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.drift_degree+1)]]), self.drift_parameters).doit()))
+    @property
+    def diffusion(self):
+        return sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree+1)]]), self.diffusion_parameters.applyfunc(lambda x: x**2)).doit())
+
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = 1 
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 1e-6
+
+    module = 'jax'
+
+    drift_integral_form=True
+    diffusion_integral_form=True
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+
+
+    target = "epsilon" # x0
+
 
 
 @dataclass
@@ -247,7 +257,9 @@ class Config:
     logging = WandbConfig()
     training = TrainingConfig()
     #sde = SDEConfig()
-    sde = SDEBaseLineConfig()
+    #sde = SDEBaseLineConfig()
+    sde = SDEPolynomialConfig()
+    
     sde.data_dim = training.resolution ** 2 * 3
 
     optimizer = OptimizerConfig()

@@ -285,9 +285,9 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         config_py_path = hf_hub_download(pretrained_model_name_or_path, filename="scheduler_config.py", revision=revision, cache_dir=cache_dir, force_download=force_download, resume_download=resume_download, proxies=proxies, local_files_only=local_files_only, use_auth_token=token, user_agent=user_agent, subfolder=subfolder)
 
         parameters = {}
-        with safe_open(parameter_path, framework="pt", device=device) as f:
+        with safe_open(parameter_path, framework="pt") as f:
             for key in f.keys():
-                parameters[key] = f.get_tensor(key)
+                parameters[key] = f.get_tensor(key).to(device)
         config_json_dict = cls._dict_from_json_file(config_json_path) 
         
         config_class = load_class_from_file(config_json_dict["_config_class_name"], config_py_path) 

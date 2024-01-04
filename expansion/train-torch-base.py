@@ -192,26 +192,15 @@ def main():
         
         steps_per_epoch = len(train_dataset) // config.training.total_batch_size
         train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
-        train_loss = 0.0
         for batch in train_dataloader:
-            break
             with accelerator.accumulate(unet):
 
                 clean_images = batch["pixel_values"]
 
 
-                #z = torch.randn(clean_images.shape).to(clean_images.device)
-
                 batch_size_z = clean_images.shape[0]
 
-                # TODO (KLAUS) : CONTINOUOS SDE --> CONTINOUOS TIME
 
-                #timesteps = torch.randint(
-                #    0, # TODO (KLAUS) : SHOULD BE SDE MIN
-                #    noise_scheduler.config.num_train_timesteps,
-                #    (batch_size_z,),
-                #    device=clean_images.device
-                #).long()
 
                 timesteps = torch.rand((batch_size_z,), device=clean_images.device) *(noise_scheduler.max_variable_value-noise_scheduler.min_sample_value) + noise_scheduler.min_sample_value
 
@@ -230,17 +219,9 @@ def main():
                     noise = noise.to(clean_images.device)
                 else:
                     noise = torch.randn_like(clean_images, device=clean_images.device)
-                # TODO (KLAUS): FIGURE OUT IF WE STORE THE PARAMTERS IN THE MODEL OR PASS THEM AROUND.
+                
                 noisy_images = noise_scheduler.sample(timesteps, clean_images.reshape(batch_size_z,-1), noise.reshape(batch_size_z,-1),*noise_scheduler.parameters(), device=accelerator.device).reshape(clean_images.shape)
 
-#                log_image = (noisy_images / 2 + 0.5).clamp(0,1)
-#                log_image = numpy_to_pil(log_image.cpu().permute(0,2,3,1).numpy())
-#
-#                image_grid = make_image_grid(log_image, rows=4,cols=4)
-#                accelerator.log({"image": wandb.Image(image_grid)}, step=global_step)
-
-                
-                #noisy_images = noise_scheduler.add_noise(clean_images, z, timesteps)
 
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
                 model_pred = unet(noisy_images, timesteps, encoder_hidden_states).sample
@@ -250,18 +231,8 @@ def main():
                     target = noise
                 else:
                     raise ValueError(f"Unknown prediction type {config.sde.target}")
-#                if noise_scheduler.config.prediction_type == "epsilon":
-#                    target = z
-#                else:
-#                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-#
-                #difference = model_pred.float() - target.float()
-                #norm = noise_scheduler
-                #loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") 
-                loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
-                avg_loss = accelerator.gather(loss.repeat(config.training.batch_size)).mean()
-                train_loss += avg_loss.item()
+                loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -287,7 +258,7 @@ def main():
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
 
-            if (_epoch % 50) == 0:
+            if (_epoch % 10) == 0:
                 unwrapped_unet = accelerator.unwrap_model(unet)
                 unwrapped_unet.eval()
                 pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
@@ -298,9 +269,9 @@ def main():
                 prompts=["Ghost attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail",  "Ghost attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail", "Ghost attribute, the whole body is gray and pink, two big eyes, no feet", "Steel attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Insect attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Steel attribute, huge ice body, and golden-yellow spine, deep purple eyes and palm, black arms", "Fairy attribute, head resembling an owl, purple feathers, pink belly feathers", "Water attribute, head resembling an owl, blue feathers, pink belly feathers", "Insect-like, with a dark blue-purple body, huge white wings with black veins, four pink-blue legs, and light red eyes", "Insect-like, with a bright blue-purple body, huge green wings with black veins, four pink-blue legs, and light red eyes"]
 
                 noise_type = random.choice(noise_types)
-                #images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
-                #image_grid = make_image_grid(images, rows=3,cols=4)
-                #accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
+                images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
+                image_grid = make_image_grid(images, rows=3,cols=4)
+                accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
                 if (_epoch % 100) == 0:
                     save_local_cloud(config, {"optimizer": accelerator.unwrap_model(optimizer).state_dict(), "lr_scheduler": accelerator.unwrap_model(lr_scheduler).state_dict()}, pipeline, interface="torch", accelerator=accelerator)

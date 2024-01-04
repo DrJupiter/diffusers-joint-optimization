@@ -36,7 +36,6 @@ def main():
 
     config = Config()
 
-
 # SET SEED
     if config.training.seed is not None:
         set_seed(config.training.seed)
