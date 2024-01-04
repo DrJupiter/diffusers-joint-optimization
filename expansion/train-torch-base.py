@@ -126,31 +126,32 @@ def main():
 
     #noise_scheduler = DDIMScheduler()
 
-    # TODO (KLAUS): Add tunable paramter to SDE
-    #noise_scheduler = TorchSDE_PARAM(config.sde.min_sample_value, config.sde.data_dim, config.sde.variable, config.)
-    noise_scheduler = TorchSDE_PARAM(
-    device=accelerator.device,
-    min_sample_value=config.sde.min_sample_value,
-    data_dimension=config.sde.data_dim,
-    variable=config.sde.variable,
-    drift_parameters=config.sde.drift_parameters,
-    diffusion_parameters=config.sde.diffusion_parameters,
-    drift=config.sde.drift,
-    diffusion=config.sde.diffusion,
-    diffusion_matrix=config.sde.diffusion_matrix,
-    initial_variable_value=config.sde.initial_variable_value,
-    max_variable_value=config.sde.max_variable_value,
-    module=config.sde.module,
-    model_target=config.sde.target,
-    drift_integral_form=config.sde.drift_integral_form,
-    diffusion_integral_form=config.sde.diffusion_integral_form,
-    diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
-    drift_dimension=config.sde.drift_dimension,
-    diffusion_dimension=config.sde.diffusion_dimension,
-    diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
-)
+    if config.training.load_noise_scheduler:
+        noise_scheduler = TorchSDE_PARAM.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="scheduler", cache_dir=config.training.cache_dir, device=accelerator.device)
+    else:
+        noise_scheduler = TorchSDE_PARAM(
+        device=accelerator.device,
+        min_sample_value=config.sde.min_sample_value,
+        data_dimension=config.sde.data_dim,
+        variable=config.sde.variable,
+        drift_parameters=config.sde.drift_parameters,
+        diffusion_parameters=config.sde.diffusion_parameters,
+        drift=config.sde.drift,
+        diffusion=config.sde.diffusion,
+        diffusion_matrix=config.sde.diffusion_matrix,
+        initial_variable_value=config.sde.initial_variable_value,
+        max_variable_value=config.sde.max_variable_value,
+        module=config.sde.module,
+        model_target=config.sde.target,
+        drift_integral_form=config.sde.drift_integral_form,
+        diffusion_integral_form=config.sde.diffusion_integral_form,
+        diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
+        drift_dimension=config.sde.drift_dimension,
+        diffusion_dimension=config.sde.diffusion_dimension,
+        diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
+    )
 # Optimizer 
-    optimizer = torch.optim.AdamW([{"params": unet.parameters()}, {"params": noise_scheduler.parameters(), "lr": 1}], lr=config.optimizer.learning_rate)
+    optimizer = torch.optim.AdamW([{"params": unet.parameters()}, {"params": noise_scheduler.parameters(), "lr": 0.5}], lr=config.optimizer.learning_rate)
 
     lr_scheduler = get_cosine_schedule_with_warmup(
         optimizer=optimizer,
@@ -292,8 +293,9 @@ def main():
                 pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
                 # TODO (KLAUS): SAMPLE RANDOM PROMPTS FROM THE DATASET
-                prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a purple and green animal with a blue nose"]
+                #prompts=["a drawing of a green pokemon with red eyes", "a red and white ball with an angry look on its face", "a cartoon butterfly with a sad look on its face", "a cartoon character with a smile on his face", "a blue and white bird with a long tail", "a blue and black object with two eyes", "a drawing of a bird with its mouth open", "a green bird with a red tail and a black nose", "drawing of a sheep with a bell on its head", "a black and yellow pokemon type animal","a drawing of a red and black dragon", "a purple and green animal with a blue nose"]
                 #prompts = ["0", "1", "2", "3", "4", "5"]
+                prompts=["Ghost attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail",  "Ghost attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail", "Ghost attribute, the whole body is gray and pink, two big eyes, no feet", "Steel attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Insect attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Steel attribute, huge ice body, and golden-yellow spine, deep purple eyes and palm, black arms", "Fairy attribute, head resembling an owl, purple feathers, pink belly feathers", "Water attribute, head resembling an owl, blue feathers, pink belly feathers", "Insect-like, with a dark blue-purple body, huge white wings with black veins, four pink-blue legs, and light red eyes", "Insect-like, with a bright blue-purple body, huge green wings with black veins, four pink-blue legs, and light red eyes"]
 
                 noise_type = random.choice(noise_types)
                 #images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images

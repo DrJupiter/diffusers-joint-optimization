@@ -13,6 +13,8 @@ import torch
 
 import jax
 
+from PIL import Image
+
 dataset_name_mapping = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
 }
@@ -106,10 +108,23 @@ def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator
             
         input_ids = inputs.input_ids
         return input_ids
-    
+
+
+    def image_preprocess(image, background_color=(255,255,255)):
+        if image.mode == 'RGBA':
+            # Create a blank background image
+            background = Image.new('RGB', image.size, background_color)
+            # Paste the image on the background
+            background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
+            image = background 
+        else:
+            image = image.convert("RGB")
+        
+        return image
+
     # Transform function
     def preprocess_train(examples):
-        images = [image.convert("RGB") for image in examples[image_column]]
+        images = [image_preprocess(image) for image in examples[image_column]]
         examples["pixel_values"] = [train_transforms(image) for image in images]
         examples["input_ids"] = tokenize_captions(examples)
 

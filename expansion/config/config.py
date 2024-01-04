@@ -31,13 +31,14 @@ class TrainingConfig:
 
     target = "epsilon"
 
-    dataset_name = "lambdalabs/pokemon-blip-captions" #"mnist" 
+    #dataset_name = "lambdalabs/pokemon-blip-captions" #"mnist" 
+    dataset_name = "wanghaofan/pokemon-wiki-captions" #"mnist" 
     dataset_config_name = None # The config of the Dataset, leave as None if there's only one config.
 
     train_data_dir = None # A folder containing the training data. Folder contents must follow the structure described in https://huggingface.co/docs/datasets/image_dataset#imagefolder. In particular, a `metadata.jsonl` file
 
     image_column = "image"
-    caption_column = "text" #"label" 
+    caption_column = "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
     #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
@@ -71,6 +72,7 @@ class TrainingConfig:
 
     load_pretrained_model = False # True -> load pretrained unet, False -> Train unet from scratch.
     load_optimizer = False # True -> load optimizer, False -> Train optimizer from scratch.
+    load_noise_scheduler = False # True -> load noise scheduler, False -> Train noise scheduler from scratch.
 
 @dataclass
 class OptimizerConfig:
@@ -244,8 +246,8 @@ def create_diffusion_param_func(var,degree,subname,func):
 class Config:
     logging = WandbConfig()
     training = TrainingConfig()
-    sde = SDEConfig()
-    #sde = SDEBaseLineConfig()
+    #sde = SDEConfig()
+    sde = SDEBaseLineConfig()
     sde.data_dim = training.resolution ** 2 * 3
 
     optimizer = OptimizerConfig()

@@ -126,17 +126,23 @@ def get_imports(file_path):
     return imports
 
 
-def save_class_to_file(cls, save_path):
+def save_class_to_file(cls, save_path, class_path=None):
     """
     Save a python class to a file
     and all import statements in the file the class is defined in.
+
+    class_path must be a file containing only the class definition and neccessary imports..
     """
-    file_path = inspect.getsourcefile(cls)
-    class_def = inspect.getsource(cls)
+    if class_path is None:
+        file_path = inspect.getsourcefile(cls)
+        class_def = inspect.getsource(cls)
 
-    imports = "\n".join(get_imports(file_path))
+        imports = "\n".join(get_imports(file_path))
 
-    config_str = imports + "\n" + class_def
+        config_str = imports + "\n" + class_def
+    else:
+        config_str = open(class_path, 'r').read()
+
     with open(save_path, "w") as f:
         f.write(config_str)
 

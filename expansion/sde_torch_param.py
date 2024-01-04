@@ -1,7 +1,8 @@
 from os import PathLike
 import os
 from sde_redefined_param import SDE_PARAM, SDEDimension
-from typing import Any, Dict, Tuple, Union, Optional
+from typing import Any, Dict, Tuple, Union, Optional, ClassVar
+from torch import TensorType
 #import torch
 import numpy as np
 import math
@@ -53,20 +54,27 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
     diffusion_integral_decomposition: str = 'cholesky',
     drift_dimension: SDEDimension = SDEDimension.DIAGONAL,
     diffusion_dimension: SDEDimension = SDEDimension.DIAGONAL,
-    diffusion_matrix_dimension: SDEDimension = SDEDimension.SCALAR):
+    diffusion_matrix_dimension: SDEDimension = SDEDimension.SCALAR,
+    config_class = Config.sde.__class__,
+    non_symbolic_parameters: Optional[Dict[TensorType, TensorType]] = None,
+    ):
         super().__init__(variable, drift_parameters, diffusion_parameters, drift, diffusion, diffusion_matrix, initial_variable_value, max_variable_value, module, model_target, drift_integral_form, diffusion_integral_form, diffusion_integral_decomposition, drift_dimension, diffusion_dimension, diffusion_matrix_dimension)
 
         self.lambdify_symbolic_functions(data_dimension)
 
-        self.initialize_parameters(device=device) # TODO (KLAUS): CONSIDER IF IT IS SMARTEST TO LEAVE INITIALIZING TO THE USER ALWAYS
+        if non_symbolic_parameters is not None:
+            self.initialize_parameters(non_symbolic_parameters.pop('drift', None), non_symbolic_parameters.pop('diffusion', None), device=device) 
+        else:
+            self.initialize_parameters(device=device) 
+
         self.device=device
         self.min_sample_value = min_sample_value
 
-        self.config_class = Config().sde.__class__
+        self.config_class = config_class
         self._internal_dict = {'data_dimension': data_dimension, '_config_class_name': self.config_class.__name__}
         
     def initialize_parameters(self, drift_parameters=None, diffusion_parameters=None, device="cuda"):
-
+        # TODO (KLAUS): ADD CHECK FOR PARAMETER SHAPES, WHEN THEY AREN'T NONE
         match self.drift_parameters.shape:
             case (1, x) | (x, 1):
                 drift_shape = (x,)        
@@ -184,7 +192,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
         parameters = dict(zip(['drift', 'diffusion'] , self.parameters()))
         save_file(parameters, os.path.join(save_directory, "sdeparameters.pt"))
 
-        save_class_to_file(self.config_class, os.path.join(save_directory, "scheduler_config.py"))
+        save_class_to_file(self.config_class, os.path.join(save_directory, "scheduler_config.py"), getattr(self, "class_path", None))
 
         self.save_config(save_directory=save_directory, push_to_hub=push_to_hub, **kwargs)
 
@@ -281,7 +289,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             for key in f.keys():
                 parameters[key] = f.get_tensor(key)
         config_json_dict = cls._dict_from_json_file(config_json_path) 
-
+        
         config_class = load_class_from_file(config_json_dict["_config_class_name"], config_py_path) 
         noise_scheduler = cls(
             device=device,
@@ -302,9 +310,14 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             diffusion_integral_decomposition=config_class.diffusion_integral_decomposition,
             drift_dimension=config_class.drift_dimension,
             diffusion_dimension=config_class.diffusion_dimension,
-            diffusion_matrix_dimension=config_class.diffusion_matrix_dimension
+            diffusion_matrix_dimension=config_class.diffusion_matrix_dimension,
+            config_class=config_class.__class__,
+            non_symbolic_parameters=parameters,
             )
-        noise_scheduler.initialize_parameters(drift_parameters=parameters['drift'], diffusion_parameters=parameters['diffusion'], device=device)
+
+        # Set class path, so we can save the correct class later
+        noise_scheduler.class_path = config_py_path 
+
         return noise_scheduler
 
 
@@ -348,10 +361,9 @@ if __name__ == "__main__":
     diffusion_dimension=config.sde.diffusion_dimension,
     diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
     )
-    #noise_scheduler.save_pretrained("/media/extra/diffusers-joint-optimization/pokemon-testing/scheduler")
-    out = TorchSDE_PARAM.from_pretrained('AltLuv/pokemon-testing', subfolder="scheduler", revision="main", cache_dir="/media/extra/diffusers-joint-optimization/expansion/config/cache")
-    import sys
-    sys.exit(0)
+    # Loading and saving
+    #noise_scheduler = TorchSDE_PARAM.from_pretrained('AltLuv/pokemon-testing', subfolder="scheduler", revision="main", cache_dir="/media/extra/diffusers-joint-optimization/expansion/config/cache")
+    #noise_scheduler.save_pretrained("/media/extra/diffusers-joint-optimization/bird/scheduler")
     timesteps = jnp.array([0.1, 0.4])
     x0 = jnp.ones((len(timesteps), data_dimension))*1/2
 
