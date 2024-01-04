@@ -67,13 +67,13 @@ class TrainingConfig:
     #save_dir = f"{repo_name}"
 
     push_to_hub = True
-    pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
-    #pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    #pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # The branch of the model repo to use. If not specified, uses the default branch (usually `main`).
 
-    load_pretrained_model = False # True -> load pretrained unet, False -> Train unet from scratch.
-    load_optimizer = False # True -> load optimizer, False -> Train optimizer from scratch.
-    load_noise_scheduler = False # True -> load noise scheduler, False -> Train noise scheduler from scratch.
+    load_pretrained_model = True # True -> load pretrained unet, False -> Train unet from scratch.
+    load_optimizer = True # True -> load optimizer, False -> Train optimizer from scratch.
+    load_noise_scheduler = True # True -> load noise scheduler, False -> Train noise scheduler from scratch.
 
 @dataclass
 class OptimizerConfig:
