@@ -61,7 +61,7 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-Keras-21"
+    repo_name = "pokemon-Keras-2"
 
     save_dir = f"/work3/s204123/{repo_name}"
     #save_dir = f"{repo_name}"
