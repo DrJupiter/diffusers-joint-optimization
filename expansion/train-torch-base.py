@@ -234,8 +234,8 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {config.sde.target}")
 
-                #loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-                loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                #loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
