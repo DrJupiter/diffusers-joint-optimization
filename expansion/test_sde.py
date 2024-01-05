@@ -103,9 +103,10 @@ def main():
     diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
     drift_dimension=config.sde.drift_dimension,
     diffusion_dimension=config.sde.diffusion_dimension,
-    diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
+    diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension,
+    non_symbolic_parameters=getattr(config.sde, "non_symbolic_parameters", None),
 )
-
+    print(noise_scheduler.parameters())
     #noise_scheduler = DDIMScheduler()
     #noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
     

@@ -148,10 +148,12 @@ def main():
         diffusion_integral_decomposition=config.sde.diffusion_integral_decomposition,
         drift_dimension=config.sde.drift_dimension,
         diffusion_dimension=config.sde.diffusion_dimension,
-        diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension
+        diffusion_matrix_dimension=config.sde.diffusion_matrix_dimension,
+        non_symbolic_parameters=getattr(config.sde, "non_symbolic_parameters", None),
     )
+
 # Optimizer 
-    optimizer = torch.optim.AdamW([{"params": unet.parameters()}, {"params": noise_scheduler.parameters(), "lr": 0.5}], lr=config.optimizer.learning_rate)
+    optimizer = torch.optim.AdamW([{"params": unet.parameters()}, {"params": noise_scheduler.parameters(), "lr": config.optimizer.sde_learning_rate}], lr=config.optimizer.learning_rate)
 
     lr_scheduler = get_cosine_schedule_with_warmup(
         optimizer=optimizer,

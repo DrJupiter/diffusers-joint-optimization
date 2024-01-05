@@ -81,7 +81,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             case _shape:
                 drift_shape = _shape
         
-        tensor_drift_parameters = drift_parameters if drift_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.drift_parameters.shape)).reshape(drift_shape).to(device) # TODO (KLAUS): Initialize smartly
+        tensor_drift_parameters = drift_parameters.to(device) if drift_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.drift_parameters.shape)).reshape(drift_shape).to(device) # TODO (KLAUS): Initialize smartly
 
         match self.diffusion_parameters.shape:
             case (1, x) | (x, 1):
@@ -89,7 +89,7 @@ class TorchSDE_PARAM(SchedulerMixin, ConfigMixin, SDE_PARAM):
             case _shape:
                 diffusion_shape = _shape
 
-        tensor_diffusion_parameters = diffusion_parameters if diffusion_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.diffusion_parameters.shape)).reshape(diffusion_shape).to(device) # TODO (KLAUS): Initialize smartly
+        tensor_diffusion_parameters = diffusion_parameters.to(device) if diffusion_parameters is not None else torch.nn.init.xavier_normal_(torch.empty(self.diffusion_parameters.shape)).reshape(diffusion_shape).to(device) # TODO (KLAUS): Initialize smartly
 
         self.tensor_drift_parameters = torch.nn.parameter.Parameter(tensor_drift_parameters, requires_grad=True)
         self.tensor_diffusion_parameters = torch.nn.parameter.Parameter(tensor_diffusion_parameters, requires_grad=True)

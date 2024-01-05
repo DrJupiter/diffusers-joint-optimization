@@ -61,24 +61,26 @@ class TrainingConfig:
     epochs = 10000
 
 
-    repo_name = "pokemon-Keras-2"
+    repo_name = "pokemon-parameterized-keras-2-mse"
 
     save_dir = f"/work3/s204123/{repo_name}"
     #save_dir = f"{repo_name}"
 
     push_to_hub = True
-    #pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
-    pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    #pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # The branch of the model repo to use. If not specified, uses the default branch (usually `main`).
 
-    load_pretrained_model = True # True -> load pretrained unet, False -> Train unet from scratch.
-    load_optimizer = True # True -> load optimizer, False -> Train optimizer from scratch.
-    load_noise_scheduler = True # True -> load noise scheduler, False -> Train noise scheduler from scratch.
+    load_pretrained_model = False # True -> load pretrained unet, False -> Train unet from scratch.
+    load_optimizer = False # True -> load optimizer, False -> Train optimizer from scratch.
+    load_noise_scheduler = False # True -> load noise scheduler, False -> Train noise scheduler from scratch.
 
 @dataclass
 class OptimizerConfig:
 
-    learning_rate = 5e-6 # Initial learning rate (after the potential warmup period) to use.
+    learning_rate = 5e-6 # Initial learning rate for the model (after the potential warmup period) to use.
+
+    sde_learning_rate = 1e-3 # Learning rate for the SDE parameters.
 
     scale_lr = False # Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.
 
@@ -110,8 +112,8 @@ class SDEConfig:
     diffusion_matrix_dimension = SDEDimension.SCALAR 
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
-    drift_parameters = Matrix([sympy.symbols("f1")])
-    diffusion_parameters = Matrix([sympy.symbols("l1")])
+    drift_parameters = Matrix([sympy.symbols("f1",real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("l1", real=True)])
     
     drift =-variable**2 * drift_parameters[0]**2
     k = 1 #* diffusion_parameters[0]**2 
@@ -134,6 +136,42 @@ class SDEConfig:
     target = "epsilon" # x0
 
 @dataclass
+class SDEParameterizedBaseLineConfig:
+    name = "Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
+
+    # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
+    drift_parameters = Matrix([sympy.symbols("f1", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("sigma_min sigma_max", real=True)])
+    
+    drift = 0
+
+    sigma_min = sympy.Abs(diffusion_parameters[0]) #0.002 
+    sigma_max = sympy.Abs(diffusion_parameters[1]) #80
+    diffusion = sigma_min * (sigma_max/sigma_min)**variable * sympy.sqrt(2 * sympy.Abs(sympy.log(sigma_max/sigma_min))) 
+
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = 1 
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 1e-6
+
+    module = 'jax'
+
+    drift_integral_form=False
+    diffusion_integral_form=False
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+    non_symbolic_parameters = {'diffusion': torch.tensor([0.002, 80.])}
+
+    target = "epsilon" # x0
+
+@dataclass
 class SDEBaseLineConfig:
     name = "Custom"
     variable = Symbol('t', nonnegative=True, real=True)
@@ -144,7 +182,7 @@ class SDEBaseLineConfig:
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
     drift_parameters = Matrix([sympy.symbols("f1")])
-    diffusion_parameters = Matrix([sympy.symbols("l1")])
+    diffusion_parameters = Matrix([sympy.symbols("sigma_min ")])
     
     drift = 0
 
@@ -167,7 +205,6 @@ class SDEBaseLineConfig:
 
 
     target = "epsilon" # x0
-
 
 def from_01_to_m_inf_inf(x):
     """applies a functino that maps from ]0;1[ to ]-\infty;\infty["""
@@ -257,8 +294,9 @@ class Config:
     logging = WandbConfig()
     training = TrainingConfig()
     #sde = SDEConfig()
-    sde = SDEBaseLineConfig()
+    #sde = SDEBaseLineConfig()
     #sde = SDEPolynomialConfig()
+    sde = SDEParameterizedBaseLineConfig()
     
     sde.data_dim = training.resolution ** 2 * 3
 
