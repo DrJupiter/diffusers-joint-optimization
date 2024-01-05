@@ -2,7 +2,7 @@
 #BSUB -q gpuv100
 #BSUB -J specialcourse 
 #BSUB -n 4
-#BSUB -gpu "num=4:mode=shared"
+#BSUB -gpu "num=4:mode=exclusive_process"
 #BSUB -R "select[gpu32gb]"
 #BSUB -W 24:00
 #BSUB -R "rusage[mem=16GB]"
