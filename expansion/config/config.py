@@ -58,10 +58,10 @@ class TrainingConfig:
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
     max_steps = None
-    epochs = 10000
+    epochs = 20000
 
 
-    repo_name = "pokemon-parameterized-keras-2-mse"
+    repo_name = "pokemon-parameterized-keras-2-basis-change"
 
     save_dir = f"/work3/s204123/{repo_name}"
     #save_dir = f"{repo_name}"
