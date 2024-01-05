@@ -159,7 +159,7 @@ class SDEParameterizedBaseLineConfig:
 
     initial_variable_value = 0
     max_variable_value = 1 # math.inf
-    min_sample_value = 1e-6
+    min_sample_value = 0
 
     module = 'jax'
 
@@ -194,7 +194,7 @@ class SDEBaseLineConfig:
 
     initial_variable_value = 0
     max_variable_value = 1 # math.inf
-    min_sample_value = 1e-6
+    min_sample_value = 0
 
     module = 'jax'
 
