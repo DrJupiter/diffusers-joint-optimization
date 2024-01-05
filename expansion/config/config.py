@@ -172,6 +172,43 @@ class SDEParameterizedBaseLineConfig:
     target = "epsilon" # x0
 
 @dataclass
+class SDEParameterizedMaxNoiseBaseLineConfig:
+    name = "Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+
+    drift_dimension = SDEDimension.SCALAR 
+    diffusion_dimension = SDEDimension.SCALAR
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
+
+    # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
+    drift_parameters = Matrix([sympy.symbols("f1", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("sigma_max", real=True)])
+    
+    drift = 0
+
+    sigma_min = 0.002 
+    sigma_max = sympy.Abs(diffusion_parameters[0]) #80
+    diffusion = sigma_min * (sigma_max/sigma_min)**variable * sympy.sqrt(2 * sympy.Abs(sympy.log(sigma_max/sigma_min))) 
+
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = 1 
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 0
+
+    module = 'jax'
+
+    drift_integral_form=False
+    diffusion_integral_form=False
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+    non_symbolic_parameters = {'diffusion': torch.tensor([80.])}
+
+    target = "epsilon" # x0
+
+
+@dataclass
 class SDEBaseLineConfig:
     name = "Custom"
     variable = Symbol('t', nonnegative=True, real=True)
