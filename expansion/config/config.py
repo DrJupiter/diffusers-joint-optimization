@@ -181,8 +181,8 @@ class SDEBaseLineConfig:
     diffusion_matrix_dimension = SDEDimension.SCALAR 
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
-    drift_parameters = Matrix([sympy.symbols("f1")])
-    diffusion_parameters = Matrix([sympy.symbols("sigma_min ")])
+    drift_parameters = Matrix([sympy.symbols("f1", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("l1", real=True)])
     
     drift = 0
 
