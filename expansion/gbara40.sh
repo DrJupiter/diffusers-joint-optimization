@@ -2,7 +2,7 @@
 #BSUB -q gpua40
 #BSUB -J specialcourse 
 #BSUB -n 16
-#BSUB -gpu "num=2:mode=exclusive_process
+#BSUB -gpu "num=2:mode=exclusive_process"
 #BSUB -W 24:00
 #BSUB -R "rusage[mem=16GB]"
 #BSUB -u s204123@student.dtu.dk
