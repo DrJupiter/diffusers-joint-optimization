@@ -146,7 +146,7 @@ class SDEParameterizedBaseLineConfig:
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
     drift_parameters = Matrix([sympy.symbols("f1", real=True)])
-    diffusion_parameters = Matrix([sympy.symbols("sigma_min sigma_max", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("sigma_min sigma_max", real=True, nonzero=True)])
     
     drift = 0
 
@@ -182,7 +182,7 @@ class SDEParameterizedMaxNoiseBaseLineConfig:
 
     # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
     drift_parameters = Matrix([sympy.symbols("f1", real=True)])
-    diffusion_parameters = Matrix([sympy.symbols("sigma_max", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("sigma_max", real=True, nonzero=True)])
     
     drift = 0
 
