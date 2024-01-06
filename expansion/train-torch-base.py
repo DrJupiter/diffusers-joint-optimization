@@ -90,6 +90,7 @@ def main():
     if config.training.load_pretrained_model:
 
         unet = UNet2DConditionModel.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="unet", cache_dir=config.training.cache_dir)
+        print("Loaded pretrained UNET")
     else:
 
         unet = UNet2DConditionModel(sample_size=config.training.resolution,
@@ -128,6 +129,7 @@ def main():
 
     if config.training.load_noise_scheduler:
         noise_scheduler = TorchSDE_PARAM.from_pretrained(config.training.pretrained_model_or_path, revision=config.training.revision, subfolder="scheduler", cache_dir=config.training.cache_dir, device=accelerator.device)
+        print("Loaded pretrained noise scheduler")
     else:
         noise_scheduler = TorchSDE_PARAM(
         device=accelerator.device,
@@ -168,7 +170,7 @@ def main():
 
         lr_scheduler_state = torch.load(hf_hub_download(config.training.pretrained_model_or_path, filename="lr_scheduler.pt", revision=config.training.revision, subfolder="lr_scheduler", cache_dir=config.training.cache_dir))
         lr_scheduler.load_state_dict(lr_scheduler_state["lr_scheduler"])
-
+        print("Loaded pretrained optimizer and lr scheduler")
 # ACCELERATE
     unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler = accelerator.prepare(unet, optimizer, train_dataloader, lr_scheduler, noise_scheduler)
 
