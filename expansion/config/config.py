@@ -41,8 +41,8 @@ class TrainingConfig:
     caption_column = "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
-    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -61,10 +61,10 @@ class TrainingConfig:
     epochs = 20000
 
 
-    repo_name = "pokemon-parameterized-max-sigma-keras-2-mse"
+    repo_name = "pokemon-test"
 
-    save_dir = f"/work3/s204123/{repo_name}"
-    #save_dir = f"{repo_name}"
+    #save_dir = f"/work3/s204123/{repo_name}"
+    save_dir = f"{repo_name}"
 
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
@@ -135,6 +135,58 @@ class SDEConfig:
 
     target = "epsilon" # x0
 
+@dataclass
+class SDEDiagonalMatrixConfig:
+    name = "Diagonal Matrix Custom"
+    variable = Symbol('t', nonnegative=True, real=True)
+
+    drift_dimension = SDEDimension.DIAGONAL 
+    diffusion_dimension = SDEDimension.DIAGONAL
+    diffusion_matrix_dimension = SDEDimension.SCALAR 
+
+    # TODO (KLAUS): HANDLE THE PARAMETERS BEING Ø
+    n = 3072 
+    degree = 20
+    drift_parameters = Matrix([sympy.symbols(f"f:{n}:{degree}",real=True)])
+    diffusion_parameters = Matrix([sympy.symbols(f"l:{n}:{degree}", real=True)])
+
+    # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
+    diffusion_matrix = 1 
+
+    @property
+    def drift(self): 
+        diagonal = []
+        polynomial = Matrix([[self.variable**i for i in range(1,self.degree+1)]]) 
+        for i in range(self.n):
+            param_vector = Matrix([self.drift_parameters[i*self.degree:(i+1)*self.degree]]).applyfunc(lambda x: x**2)
+            diagonal.append(sum(sympy.HadamardProduct(polynomial, param_vector).doit()))
+        return -Matrix([diagonal])
+
+    @property
+    def diffusion(self): 
+        diagonal = []
+        polynomial = Matrix([[self.variable**i for i in range(1,self.degree+1)]]) 
+        for i in range(self.n):
+            param_vector = Matrix([self.diffusion_parameters[i*self.degree:(i+1)*self.degree]]).applyfunc(lambda x: x**2)
+            diagonal.append(sum(sympy.HadamardProduct(polynomial, param_vector).doit()))
+        return -Matrix([diagonal])   
+
+
+
+
+    initial_variable_value = 0
+    max_variable_value = 1 # math.inf
+    min_sample_value = 1e-6
+
+    module = 'jax'
+
+    drift_integral_form=True
+    diffusion_integral_form=True
+    diffusion_integral_decomposition = 'cholesky' # ldl
+
+
+
+    target = "epsilon" # x0
 @dataclass
 class SDEParameterizedBaseLineConfig:
     name = "Custom"
@@ -333,7 +385,8 @@ class Config:
     #sde = SDEBaseLineConfig()
     #sde = SDEPolynomialConfig()
     #sde = SDEParameterizedBaseLineConfig()
-    sde = SDEParameterizedMaxNoiseBaseLineConfig()
+    #sde = SDEParameterizedMaxNoiseBaseLineConfig()
+    sde = SDEDiagonalMatrixConfig()
     
     sde.data_dim = training.resolution ** 2 * 3
 
