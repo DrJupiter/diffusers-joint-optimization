@@ -369,7 +369,7 @@ class SDEPolynomialConfig:
     @property
     def diffusion(self):
         
-        return self.variable**(self.diffusion_parameters[0]**2 + sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree)]]), Matrix(self.diffusion_parameters[1:]).applyfunc(lambda x: x**2)).doit()))
+        return self.variable**(self.diffusion_parameters[0]**2 + sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree)]]), Matrix([self.diffusion_parameters[1:]]).applyfunc(lambda x: x**2)).doit()))
 
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
