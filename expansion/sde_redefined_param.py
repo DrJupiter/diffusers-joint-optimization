@@ -255,7 +255,7 @@ class SDE_PARAM:
         so they can be called within the specifc module
         """
         # CONCRETE DIMENSION FOR SYMBOLIC CALCULATIONS
-        symbolic_sample = self.symbolic_sample().subs({self.data_dim: data_dimension})
+        symbolic_sample = sympy.simplify(self.symbolic_sample().subs({self.data_dim: data_dimension}))
         symbolic_reverse_time_derivative = sympy.simplify(self.symbolic_reverse_time_derivative().subs({self.data_dim: data_dimension}))
 
         symbolic_loss = self.symbolic_scaled_loss().subs({self.data_dim: data_dimension})
@@ -268,16 +268,16 @@ class SDE_PARAM:
 
        
         # SCALED LOSS
-        lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module, cse=True)
+        lambdified_scaled_loss = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], symbolic_loss, self.module)
         #print(symbolic_loss)
 
         # DERIVATIVE OF NORMALIZING FACTORS w.r.t MODEL, DRIFT, DIFFUSION
 
-        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], (sympy.simplify(symbolic_loss.diff(symbolic_model, old_algorithm=self.scaled_loss_old_algorithm))), self.module, cse=True)
+        lambdified_scaled_loss_derivative_model = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], (sympy.simplify(symbolic_loss.diff(symbolic_model, old_algorithm=self.scaled_loss_old_algorithm))), self.module)
 
-        lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module, cse=True)
+        lambdified_scaled_loss_derivative_drift = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.drift_parameters))), self.module)
 
-        lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module, cse=True)
+        lambdified_scaled_loss_derivative_diffusion = lambdify([self.variable, symbolic_target, symbolic_model, self.drift_parameters, self.diffusion_parameters], simple_squeeze(sympy.simplify(symbolic_loss.diff(self.diffusion_parameters))), self.module)
 
         #symbolic_model = self.symbolic_model.subs({self.data_dim: data_dimension})
         #symbolic_target = self.symbolic_target.subs({self.data_dim: data_dimension})
@@ -286,17 +286,17 @@ class SDE_PARAM:
 
 
         # SAMPLE
-        lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module, cse=True)
+        lambdified_sample = lambdify([self.variable, symbolic_input, symbolic_noise, self.drift_parameters, self.diffusion_parameters],  symbolic_sample, self.module)
 
         # DERIVATIVE OF SAMPLE W.R.T DRIFT AND DIFFUSION 
         drift_derivative = symbolic_sample.diff(self.drift_parameters)
         diffusion_derivative = symbolic_sample.diff(self.diffusion_parameters)
 
-        lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module, cse=True)
-        lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module, cse=True)
+        lambdified_drift_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], drift_derivative, self.module)
+        lambdified_diffusion_derivative = lambdify([self.variable, symbolic_input , symbolic_noise, self.drift_parameters, self.diffusion_parameters], diffusion_derivative, self.module)
 
         # REVERSE TIME DERIVATIVE
-        lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module, cse=True)
+        lambdified_reverse_time_derivative = lambdify([self.variable, symbolic_input, symbolic_noise, symbolic_model, self.drift_parameters, self.diffusion_parameters],  symbolic_reverse_time_derivative, self.module)
         
         # CONVERT JACOBIANS TO NUMERATOR VECTOR LAYOUT
         if self.module == "jax":

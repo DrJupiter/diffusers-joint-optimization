@@ -37,6 +37,8 @@ def main():
     sys.setrecursionlimit(15000)
     config = Config()
 
+    if config.debug:
+        print("WARNING: DEBUG MODE IS ON")
 
 # SET SEED
     if config.training.seed is not None:
@@ -93,34 +95,34 @@ def main():
         print("Loaded pretrained UNET")
     else:
 
-        unet = UNet2DConditionModel(sample_size=config.training.resolution,
-                                in_channels=3,
-                                out_channels=3,
-                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-                                )
-
         #unet = UNet2DConditionModel(sample_size=config.training.resolution,
-        #                            in_channels=3,
-        #                            out_channels=3,
-        #                            block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-        #                            down_block_types=(
-        #                                "DownBlock2D",  # a regular ResNet downsampling block
-        #                                "DownBlock2D",
-        #                                "DownBlock2D",
-        #                                "DownBlock2D",
-        #                                "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-        #                                "DownBlock2D",
-        #                            ),
-        #                            up_block_types=(
-        #                                "UpBlock2D",  # a regular ResNet upsampling block
-        #                                "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                            ),
-        #                            cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-        #                            )
+        #                        in_channels=3,
+        #                        out_channels=3,
+        #                        cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+        #                        )
+
+        unet = UNet2DConditionModel(sample_size=config.training.resolution,
+                                    in_channels=3,
+                                    out_channels=3,
+                                    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+                                    down_block_types=(
+                                        "DownBlock2D",  # a regular ResNet downsampling block
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+                                        "DownBlock2D",
+                                    ),
+                                    up_block_types=(
+                                        "UpBlock2D",  # a regular ResNet upsampling block
+                                        "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                    ),
+                                    cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                    )
     #unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
@@ -236,7 +238,8 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {config.sde.target}")
 
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                # Regulizar term
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") + 2*F.mse_loss(noisy_images.float(), clean_images.float(), reduction="mean")
                 #loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
                 accelerator.backward(loss)
@@ -263,7 +266,7 @@ def main():
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
 
-            if (_epoch % 50) == 0:
+            if (_epoch % 50) == 0 or (config.debug and (_epoch % 5) == 0):
                 unwrapped_unet = accelerator.unwrap_model(unet)
                 unwrapped_unet.eval()
                 pipeline = UTTIPipeline(unwrapped_unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
@@ -274,11 +277,11 @@ def main():
                 prompts=["Ghost attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attribute, with a yellow zipper on the mouth, bloodshot glasses, gray body", "Grass attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail",  "Ghost attributes, the top of the head is a tuft of hair that looks like a tall and straight grass, fan-shaped big ears, white eyebrows, thick and long emerald green tail", "Ghost attribute, the whole body is gray and pink, two big eyes, no feet", "Steel attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Insect attribute, huge sword body, hilt, sword tan, and golden-yellow sword spine, deep purple eyes and palm, black arms, jagged blade", "Steel attribute, huge ice body, and golden-yellow spine, deep purple eyes and palm, black arms", "Fairy attribute, head resembling an owl, purple feathers, pink belly feathers", "Water attribute, head resembling an owl, blue feathers, pink belly feathers", "Insect-like, with a dark blue-purple body, huge white wings with black veins, four pink-blue legs, and light red eyes", "Insect-like, with a bright blue-purple body, huge green wings with black veins, four pink-blue legs, and light red eyes"]
 
                 noise_type = random.choice(noise_types)
-                images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=True).images
+                images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=config.debug).images
                 image_grid = make_image_grid(images, rows=3,cols=4)
                 accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
-                if (_epoch % 100) == 0:
+                if (_epoch % 100) == 0 and not config.debug:
                     save_local_cloud(config, {"optimizer": accelerator.unwrap_model(optimizer).state_dict(), "lr_scheduler": accelerator.unwrap_model(lr_scheduler).state_dict()}, pipeline, interface="torch", accelerator=accelerator)
                     #save_local_cloud(config, None, pipeline, interface="torch", accelerator=accelerator)
 

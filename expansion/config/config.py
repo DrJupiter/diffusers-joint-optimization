@@ -41,8 +41,8 @@ class TrainingConfig:
     caption_column = "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
-    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -63,8 +63,8 @@ class TrainingConfig:
 
     repo_name = "pokemon-test"
 
-    #save_dir = f"/work3/s204123/{repo_name}"
-    save_dir = f"{repo_name}"
+    save_dir = f"/work3/s204123/{repo_name}"
+    #save_dir = f"{repo_name}"
 
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
@@ -302,6 +302,10 @@ def from_m_inf_inf_to_0_m_inf(x):
     """ applies a functino that maps from ]-\infty;\infty[ to ]0;-inf[ """
     return -sp.exp(x)
 
+def sigmoid(x):
+    """applies a sigmoid function"""
+    return 1/(1+sp.exp(-x))
+
 def polynomial(x,params):
     """Crates a polynomial with degrees equal to param count"""
     summ = 0
@@ -338,7 +342,12 @@ def create_diffusion_param_func(var,degree,subname,func):
 @dataclass
 class SDEPolynomialConfig:
     name = "Custom"
-    variable = Symbol('t', nonnegative=True, real=True)
+
+    initial_variable_value = 0
+    max_variable_value = 1# math.inf
+    min_sample_value = 1e-6
+
+    variable = Symbol('t', nonnegative=True, real=True, domain=sympy.Interval(initial_variable_value, max_variable_value, left_open=False, right_open=False))
     drift_dimension = SDEDimension.SCALAR 
     diffusion_dimension = SDEDimension.SCALAR
     diffusion_matrix_dimension = SDEDimension.SCALAR 
@@ -346,24 +355,25 @@ class SDEPolynomialConfig:
     drift_degree = 20
     diffusion_degree = 20
 
-    drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True)])
+    drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True, nonzero=True)])
 
-    # square parameters to ensure positive definiteness
-    diffusion_parameters = Matrix([sympy.symbols(f"l:{diffusion_degree}", real=True)])
+    diffusion_parameters = Matrix([sympy.symbols("l0", real=True, nonzero=True), *sympy.symbols(f"l:{diffusion_degree-1}", real=True, nonzero=True)])
+
 
     @property
     def drift(self): 
-        return -sympy.Abs(sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.drift_degree+1)]]), self.drift_parameters).doit()))
+        transformed_variable = self.variable
+        return -sympy.Abs(sum(sympy.HadamardProduct(Matrix([[transformed_variable**i for i in range(1,self.drift_degree+1)]]), self.drift_parameters).doit()))
+        
+
     @property
     def diffusion(self):
-        return sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree+1)]]), self.diffusion_parameters.applyfunc(lambda x: x**2)).doit())
+        
+        return self.variable**(self.diffusion_parameters[0]**2 + sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree)]]), Matrix(self.diffusion_parameters[1:]).applyfunc(lambda x: x**2)).doit()))
 
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
 
-    initial_variable_value = 0
-    max_variable_value = 1 # math.inf
-    min_sample_value = 1e-6
 
     module = 'jax'
 
@@ -374,7 +384,7 @@ class SDEPolynomialConfig:
 
 
     target = "epsilon" # x0
-
+    non_symbolic_parameters = {'drift': torch.ones(drift_degree), 'diffusion': torch.ones(diffusion_degree)}
 
 
 @dataclass
@@ -383,10 +393,10 @@ class Config:
     training = TrainingConfig()
     #sde = SDEConfig()
     #sde = SDEBaseLineConfig()
-    #sde = SDEPolynomialConfig()
+    sde = SDEPolynomialConfig()
     #sde = SDEParameterizedBaseLineConfig()
     #sde = SDEParameterizedMaxNoiseBaseLineConfig()
-    sde = SDEDiagonalMatrixConfig()
+    #sde = SDEDiagonalMatrixConfig()
     
     sde.data_dim = training.resolution ** 2 * 3
 
@@ -394,19 +404,4 @@ class Config:
     if optimizer.scale_lr:
         optimizer.learning_rate *= training.total_batch_size
 
-
-    # SANITY CHECKS for the SDE
-    # TODO (KLAUS) : REFACTOR 
-    #if sde.drift_type == SDEDimension.SCALAR:
-    #    assert sde.drift.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    #elif sde.drift_type == SDEDimension.DIAGONAL:
-    #    assert sde.drift.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    #elif sde.drift_type == SDEDimension.FULL:
-    #    assert sde.drift.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
-    
-    #if sde.diffusion_type == SDEDimension.SCALAR:
-    #    assert sde.diffusion.shape == (1,1), "A scalar drift must have dimensions (1,1)"
-    #elif sde.diffusion_type == SDEDimension.DIAGONAL:
-    #    assert sde.diffusion.shape == (1, training.resolution), "A diagonal drift must have dimensions (1, resolution)"
-    #elif sde.diffusion_type == SDEDimension.FULL:
-    #    assert sde.diffusion.shape == (training.resolution, training.resolution), "A full drift must have dimensions (resolution, resolution)"
+    debug = True
