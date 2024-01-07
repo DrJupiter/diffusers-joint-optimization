@@ -53,7 +53,7 @@ class TrainingConfig:
 # HYPER PARAMETERS
     seed = 0
 
-    batch_size = 32
+    batch_size = 40
 
     total_batch_size = batch_size * jax.local_device_count() # TODO (KLAUS) : CHANGE TO BE NON JAX DEPENDENT
 
@@ -61,7 +61,7 @@ class TrainingConfig:
     epochs = 20000
 
 
-    repo_name = "pokemon-test"
+    repo_name = "pokemon-polynomial-2"
 
     save_dir = f"/work3/s204123/{repo_name}"
     #save_dir = f"{repo_name}"
@@ -357,7 +357,7 @@ class SDEPolynomialConfig:
 
     drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True, nonzero=True)])
 
-    diffusion_parameters = Matrix([sympy.symbols("l0", real=True, nonzero=True), *sympy.symbols(f"l:{diffusion_degree-1}", real=True, nonzero=True)])
+    diffusion_parameters = Matrix([sympy.symbols(f"l:{diffusion_degree}", real=True, nonzero=True)])
 
 
     @property
@@ -368,8 +368,7 @@ class SDEPolynomialConfig:
 
     @property
     def diffusion(self):
-        
-        return self.variable**(self.diffusion_parameters[0]**2 + sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(1,self.diffusion_degree)]]), Matrix([self.diffusion_parameters[1:]]).applyfunc(lambda x: x**2)).doit()))
+        return self.variable**(sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(0,self.diffusion_degree)]]),self.diffusion_parameters.applyfunc(lambda x: x**2)).doit()))
 
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
     diffusion_matrix = 1 
@@ -404,4 +403,4 @@ class Config:
     if optimizer.scale_lr:
         optimizer.learning_rate *= training.total_batch_size
 
-    debug = True
+    debug = False
