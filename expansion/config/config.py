@@ -61,7 +61,7 @@ class TrainingConfig:
     epochs = 20000
 
 
-    repo_name = "pokemon-polynomial-2"
+    repo_name = "pokemon-polynomial-2-gbar"
 
     save_dir = f"/work3/s204123/{repo_name}"
     #save_dir = f"{repo_name}"
