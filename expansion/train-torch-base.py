@@ -123,7 +123,7 @@ def main():
         #                            ),
         #                            cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
         #                            )
-    unet = torch.compile(unet)
+    #unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
 
