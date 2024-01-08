@@ -129,3 +129,6 @@ def main():
 
             all_generated_images += images
             all_images += batch["pixel_values"]
+
+if __name__ == "__main__":
+    main()
