@@ -126,7 +126,8 @@ def main():
             noise_type = random.choice(noise_types)
             images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=config.debug).images
 
-            image_grid = make_image_grid(images, rows=5,cols=8)
+            #image_grid = make_image_grid(images, rows=5,cols=8)
+            image_grid = make_image_grid(images, rows=6,cols=50)
             accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
 
             all_generated_images += images
