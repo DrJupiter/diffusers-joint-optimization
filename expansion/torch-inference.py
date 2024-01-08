@@ -131,7 +131,8 @@ def main():
 
             all_generated_images += images
             all_images += batch["pixel_values"]
-            print(images.shape, batch["pixel_values"].shape)
+            print(batch["pixel_values"].shape)
+            print(torch.stack(images).shape)
 
 if __name__ == "__main__":
     main()
