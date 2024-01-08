@@ -67,7 +67,7 @@ def main():
     )
     #tokenizer = torch.compile(tokenizer)
 
-    train_dataset, train_dataloader = get_dataset(config, tokenizer, interface="torch", accelerator=accelerator)
+    train_dataset, train_dataloader = get_dataset(config, tokenizer, interface="torch", accelerator=accelerator, tokenize_captions=False)
 
 
 

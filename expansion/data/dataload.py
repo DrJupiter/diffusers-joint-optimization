@@ -23,7 +23,7 @@ from config.utils import Config
 
 # TODO (KLAUS): FILL OUT CONFIG ATTRIBUTES
 
-def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator = None):
+def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator = None, tokenize_captions=True):
 
     assert interface in ["torch", "jax"], f"Iterface {interface} not found place choose torch/jax"
     if interface == "torch":
@@ -126,7 +126,7 @@ def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator
     def preprocess_train(examples):
         images = [image_preprocess(image) for image in examples[image_column]]
         examples["pixel_values"] = [train_transforms(image) for image in images]
-        examples["input_ids"] = tokenize_captions(examples)
+        examples["input_ids"] = tokenize_captions(examples) if tokenize_captions else examples[caption_column]
 
         return examples
 
