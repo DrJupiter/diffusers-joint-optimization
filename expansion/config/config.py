@@ -41,8 +41,8 @@ class TrainingConfig:
     caption_column = "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
-    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -61,10 +61,10 @@ class TrainingConfig:
     epochs = 20000
 
 
-    repo_name = "pokemon-polynomial-2-gbar"
+    repo_name = "pokemon-test"
 
-    save_dir = f"/work3/s204123/{repo_name}"
-    #save_dir = f"{repo_name}"
+    #save_dir = f"/work3/s204123/{repo_name}"
+    save_dir = f"{repo_name}"
 
     push_to_hub = True
     pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
@@ -345,7 +345,7 @@ class SDEPolynomialConfig:
 
     initial_variable_value = 0
     max_variable_value = 1# math.inf
-    min_sample_value = 1e-6
+    min_sample_value = 0
 
     variable = Symbol('t', nonnegative=True, real=True, domain=sympy.Interval(initial_variable_value, max_variable_value, left_open=False, right_open=False))
     drift_dimension = SDEDimension.SCALAR 
@@ -355,7 +355,8 @@ class SDEPolynomialConfig:
     drift_degree = 20
     diffusion_degree = 20
 
-    drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True, nonzero=True)])
+    #drift_parameters = Matrix([sympy.symbols(f"f:{drift_degree}", real=True, nonzero=True)])
+    drift_parameters = Matrix([sympy.symbols(f"f0", real=True)])
 
     diffusion_parameters = Matrix([sympy.symbols(f"l:{diffusion_degree}", real=True, nonzero=True)])
 
@@ -363,11 +364,13 @@ class SDEPolynomialConfig:
     @property
     def drift(self): 
         transformed_variable = self.variable
-        return -sympy.Abs(sum(sympy.HadamardProduct(Matrix([[transformed_variable**i for i in range(1,self.drift_degree+1)]]), self.drift_parameters).doit()))
+        return - (transformed_variable**2 + 4 * transformed_variable**4 + 2* transformed_variable**5)
+        #return -sympy.Abs(sum(sympy.HadamardProduct(Matrix([[transformed_variable**i for i in range(1,self.drift_degree+1)]]), self.drift_parameters).doit()))
         
 
     @property
     def diffusion(self):
+        #return self.variable * 1e-10
         return self.variable**(sum(sympy.HadamardProduct(Matrix([[self.variable**i for i in range(0,self.diffusion_degree)]]),self.diffusion_parameters.applyfunc(lambda x: x**2)).doit()))
 
     # TODO (KLAUS) : in the SDE SAMPLING CHANGING Q impacts how we sample z ~ N(0, Q*(delta t))
@@ -383,7 +386,7 @@ class SDEPolynomialConfig:
 
 
     target = "epsilon" # x0
-    non_symbolic_parameters = {'drift': torch.ones(drift_degree), 'diffusion': torch.ones(diffusion_degree)}
+    non_symbolic_parameters = {'drift': torch.tensor([0.]), 'diffusion': torch.ones(diffusion_degree)}
 
 
 @dataclass
@@ -403,4 +406,4 @@ class Config:
     if optimizer.scale_lr:
         optimizer.learning_rate *= training.total_batch_size
 
-    debug = False
+    debug = True

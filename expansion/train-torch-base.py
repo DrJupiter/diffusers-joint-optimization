@@ -95,34 +95,34 @@ def main():
         print("Loaded pretrained UNET")
     else:
 
-        unet = UNet2DConditionModel(sample_size=config.training.resolution,
-                                in_channels=3,
-                                out_channels=3,
-                                cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-                                )
-
         #unet = UNet2DConditionModel(sample_size=config.training.resolution,
-        #                            in_channels=3,
-        #                            out_channels=3,
-        #                            block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
-        #                            down_block_types=(
-        #                                "DownBlock2D",  # a regular ResNet downsampling block
-        #                                "DownBlock2D",
-        #                                "DownBlock2D",
-        #                                "DownBlock2D",
-        #                                "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-        #                                "DownBlock2D",
-        #                            ),
-        #                            up_block_types=(
-        #                                "UpBlock2D",  # a regular ResNet upsampling block
-        #                                "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                                "UpBlock2D",
-        #                            ),
-        #                            cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
-        #                            )
+        #                        in_channels=3,
+        #                        out_channels=3,
+        #                        cross_attention_dim=768 # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+        #                        )
+
+        unet = UNet2DConditionModel(sample_size=config.training.resolution,
+                                    in_channels=3,
+                                    out_channels=3,
+                                    block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
+                                    down_block_types=(
+                                        "DownBlock2D",  # a regular ResNet downsampling block
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "DownBlock2D",
+                                        "CrossAttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+                                        "DownBlock2D",
+                                    ),
+                                    up_block_types=(
+                                        "UpBlock2D",  # a regular ResNet upsampling block
+                                        "CrossAttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                        "UpBlock2D",
+                                    ),
+                                    cross_attention_dim=768, # TODO (KLAUS) : EXTRACT THIS NUMBER FROM CLIP MODEL
+                                    )
     #unet = torch.compile(unet)
     unet.train()    
 # NOISE SCHEDULAR
@@ -239,7 +239,7 @@ def main():
                     raise ValueError(f"Unknown prediction type {config.sde.target}")
 
                 # Regulizar term
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") + F.mse_loss(noisy_images.float(), clean_images.float(), reduction="mean")
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean") + (F.mse_loss(noisy_images.float(), clean_images.float(), reduction="none").reshape(batch_size_z, -1) * torch.exp(-((timesteps)**2 + 4 * timesteps**4 + 6*timesteps**5)).reshape(batch_size_z, 1)).mean()
                 #loss = noise_scheduler.scaled_loss(timesteps, target.float().reshape(batch_size_z,-1), model_pred.float().reshape(batch_size_z,-1), *noise_scheduler.parameters(), device=accelerator.device).mean()
 
                 accelerator.backward(loss)
