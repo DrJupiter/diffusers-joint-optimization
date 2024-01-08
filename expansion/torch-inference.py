@@ -111,6 +111,7 @@ def main():
     pipeline = UTTIPipeline(unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
     all_generated_images = []
+    all_images = []
     for batch in train_dataloader:
         if accelerator.is_main_process: 
 
@@ -130,6 +131,7 @@ def main():
 
             all_generated_images += images
             all_images += batch["pixel_values"]
+            print(images.shape, batch["pixel_values"].shape)
 
 if __name__ == "__main__":
     main()
