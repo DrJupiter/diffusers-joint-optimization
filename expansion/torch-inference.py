@@ -104,12 +104,13 @@ def main():
             update_sde_parameter_plot(sde_param_plots[0], global_step, *_log_drift_param.detach())
             update_sde_parameter_plot(sde_param_plots[1], global_step, *_log_diffusion_param.detach())
             accelerator.log({"Drift Parameters": sde_param_plots[0], "Diffusion Parameters": sde_param_plots[1]}, step=global_step) 
-    
+
+    unet = accelerator.unwrap_model(unet) 
     unet.eval()
 
     pipeline = UTTIPipeline(unet, accelerator.unwrap_model(noise_scheduler), tokenizer, accelerator.unwrap_model(text_encoder))
 
-    all_images = []
+    all_generated_images = []
     for batch in train_dataloader:
         if accelerator.is_main_process: 
 
@@ -122,7 +123,9 @@ def main():
             prompts = batch["input_ids"]
             noise_type = random.choice(noise_types)
             images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=config.debug).images
-            all_images += images
 
             image_grid = make_image_grid(images, rows=3,cols=4)
             accelerator.log({f"image-{noise_type}": wandb.Image(image_grid)}, step=global_step)
+
+            all_generated_images += images
+            all_images += batch["pixel_values"]
