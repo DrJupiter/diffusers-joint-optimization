@@ -164,7 +164,7 @@ def get_dataset(config: Config, tokenizer, interface: str = "torch", accelerator
             batch = {k: v.numpy() for k, v in batch.items()}
 
         elif interface == "torch":
-            batch = {"pixel_values": pixel_values, "input_ids": torch.stack(input_ids)}
+            batch = {"pixel_values": pixel_values, "input_ids": torch.stack(input_ids) if tokenize_the_captions else input_ids}
 
         return batch
 
