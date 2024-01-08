@@ -31,18 +31,18 @@ class TrainingConfig:
 
     target = "epsilon"
 
-    #dataset_name = "lambdalabs/pokemon-blip-captions" #"mnist" 
-    dataset_name = "wanghaofan/pokemon-wiki-captions" #"mnist" 
+    dataset_name = "lambdalabs/pokemon-blip-captions" #"mnist" 
+    #dataset_name = "wanghaofan/pokemon-wiki-captions" #"mnist" 
     dataset_config_name = None # The config of the Dataset, leave as None if there's only one config.
 
     train_data_dir = None # A folder containing the training data. Folder contents must follow the structure described in https://huggingface.co/docs/datasets/image_dataset#imagefolder. In particular, a `metadata.jsonl` file
 
     image_column = "image"
-    caption_column = "text_en" #"text" #"label" 
+    caption_column = "text" # "text_en" #"text" #"label" 
     try_convert_label_string = False # True
 
-    #cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
-    cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
+    cache_dir = "/work3/s204123/cache" # The directory where the downloaded models and datasets will be stored.
+    #cache_dir = "./cache" # The directory where the downloaded models and datasets will be stored.
     
 # IMAGE CONFIGURATION
 
@@ -67,7 +67,7 @@ class TrainingConfig:
     save_dir = f"{repo_name}"
 
     push_to_hub = True
-    pretrained_model_or_path = "AltLuv/pokemon-test-tti" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
+    pretrained_model_or_path = "AltLuv/pokemon-base-line-kerasVe" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     #pretrained_model_or_path = f"AltLuv/{repo_name}" # "runwayml/stable-diffusion-v1-5" # "stabilityai/stable-diffusion-xl-base-1.0" #"duongna/stable-diffusion-v1-4-flax" "CompVis/stable-diffusion-v1-4"
     revision = None # The branch of the model repo to use. If not specified, uses the default branch (usually `main`).
 
