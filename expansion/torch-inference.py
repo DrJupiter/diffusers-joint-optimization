@@ -121,6 +121,7 @@ def main():
 
 
             prompts = batch["input_ids"]
+            print(prompts)
             noise_type = random.choice(noise_types)
             images = pipeline(prompts, accelerator.device, generator=torch.manual_seed(config.training.seed), num_inference_steps=1000, noise=noise_type, method=SDESolver.EULER, debug=config.debug).images
 
