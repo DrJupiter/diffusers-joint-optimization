@@ -468,7 +468,15 @@ class SDE_PARAM:
             case SDEDimension.SCALAR:
                 diffusion_term = - (self.diffusion.diffusion * self.diffusion.diffusion) * score + self.diffusion.diffusion * self.symbolic_noise
 
-        return self.symbolic_mean() + diffusion_term
+        match self.drift.dimension:
+            case SDEDimension.FULL:
+                drift_term = self.symbolic_input @ self.drift.drift  
+            case SDEDimension.DIAGONAL:
+                drift_term = sympy.HadamardProduct(self.drift.drift, self.symbolic_input)
+            case SDEDimension.SCALAR:
+                drift_term = self.drift.drift * self.symbolic_input
+
+        return drift_term + diffusion_term 
 
     def step(self, data, reverse_time_derivative, dt):
         return data + dt * reverse_time_derivative
